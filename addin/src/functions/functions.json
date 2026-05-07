@@ -1,0 +1,124 @@
+{
+  "functions": [
+    {
+      "id": "CLASSIFY",
+      "name": "CLASSIFY",
+      "description": "Classify text into one of the given categories using AI.",
+      "parameters": [
+        {
+          "name": "text",
+          "description": "Text to classify.",
+          "type": "string",
+          "dimensionality": "scalar"
+        },
+        {
+          "name": "categories",
+          "description": "Comma-separated list of categories.",
+          "type": "string",
+          "dimensionality": "scalar"
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    },
+    {
+      "id": "EXTRACT",
+      "name": "EXTRACT",
+      "description": "Extract a specific field from text using AI.",
+      "parameters": [
+        {
+          "name": "text",
+          "description": "Source text.",
+          "type": "string",
+          "dimensionality": "scalar"
+        },
+        {
+          "name": "field",
+          "description": "Field to extract (e.g. amount, date, sender).",
+          "type": "string",
+          "dimensionality": "scalar"
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    },
+    {
+      "id": "CLEAN",
+      "name": "CLEAN",
+      "description": "Clean and normalise financial text using AI.",
+      "parameters": [
+        {
+          "name": "text",
+          "description": "Text to clean.",
+          "type": "string",
+          "dimensionality": "scalar"
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    },
+    {
+      "id": "MATCH",
+      "name": "MATCH",
+      "description": "Fuzzy-match a value against a list using AI.",
+      "parameters": [
+        {
+          "name": "value",
+          "description": "Value to match.",
+          "type": "string",
+          "dimensionality": "scalar"
+        },
+        {
+          "name": "list",
+          "description": "Comma-separated list of candidates.",
+          "type": "string",
+          "dimensionality": "scalar"
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    },
+    {
+      "id": "SUMMARIZE",
+      "name": "SUMMARIZE",
+      "description": "Summarise a range of text values using AI.",
+      "parameters": [
+        {
+          "name": "range",
+          "description": "A range of text values to summarise.",
+          "type": "string",
+          "dimensionality": "matrix"
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    },
+    {
+      "id": "ASK",
+      "name": "ASK",
+      "description": "Ask the AI a question and return the answer as a cell value.",
+      "parameters": [
+        {
+          "name": "prompt",
+          "description": "The question to ask.",
+          "type": "string",
+          "dimensionality": "scalar"
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    }
+  ]
+}

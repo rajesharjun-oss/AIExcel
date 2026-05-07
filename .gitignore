@@ -4,4 +4,6 @@ build/
 .env
 .env.local
 *.tsbuildinfo
+*.sqlite
+certs/
 .DS_Store

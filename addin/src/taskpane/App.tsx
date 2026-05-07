@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Button,
   Field,
@@ -9,8 +9,9 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:3001";
+import { post } from "../shared/api-client";
+import { getWorkbookContext } from "../shared/workbook";
+import type { ChatMessage, ChatRequest, ChatResponse } from "@aiexcel/shared";
 
 const useStyles = makeStyles({
   root: {
@@ -30,12 +31,16 @@ const useStyles = makeStyles({
   },
   bubble: {
     padding: tokens.spacingVerticalS,
+    paddingLeft: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalM,
     borderRadius: tokens.borderRadiusMedium,
     background: tokens.colorNeutralBackground3,
     whiteSpace: "pre-wrap",
   },
   userBubble: {
     background: tokens.colorBrandBackground2,
+    alignSelf: "flex-end",
+    maxWidth: "85%",
   },
   inputRow: {
     display: "flex",
@@ -44,46 +49,36 @@ const useStyles = makeStyles({
   },
 });
 
-type Message = { role: "user" | "assistant"; text: string };
-
 export const App: React.FC = () => {
   const styles = useStyles();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [history, setHistory] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const getContext = async (): Promise<Record<string, unknown> | undefined> => {
-    try {
-      return await Excel.run(async (ctx) => {
-        const range = ctx.workbook.getSelectedRange();
-        range.load(["address", "values"]);
-        await ctx.sync();
-        return { address: range.address, values: range.values };
-      });
-    } catch {
-      return undefined;
-    }
-  };
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [history, loading]);
 
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", text }]);
+    const newHistory: ChatMessage[] = [...history, { role: "user", content: text }];
+    setHistory(newHistory);
     setInput("");
     setLoading(true);
 
     try {
-      const context = await getContext();
-      const res = await fetch(`${BACKEND_URL}/api/ai/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, context }),
-      });
-      const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", text: data.reply ?? "No response." }]);
+      const workbookContext = await getWorkbookContext().catch(() => undefined);
+      const body: ChatRequest = { messages: newHistory, workbookContext };
+      const { reply } = await post<ChatResponse>("/v1/chat", body);
+      setHistory((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
-      setMessages((prev) => [...prev, { role: "assistant", text: `Error: ${String(err)}` }]);
+      setHistory((prev) => [
+        ...prev,
+        { role: "assistant", content: `Error: ${String(err)}` },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -91,18 +86,24 @@ export const App: React.FC = () => {
 
   return (
     <div className={styles.root}>
-      <Title2>AIExcel Assistant</Title2>
+      <Title2>AI Assistant</Title2>
 
       <div className={styles.messages}>
-        {messages.length === 0 && (
-          <Body1>Ask me anything about your spreadsheet. I can see your selected range.</Body1>
+        {history.length === 0 && (
+          <Body1>
+            Ask me anything about your spreadsheet. I can see your selected range and active sheet.
+          </Body1>
         )}
-        {messages.map((m, i) => (
-          <div key={i} className={`${styles.bubble} ${m.role === "user" ? styles.userBubble : ""}`}>
-            <Body1>{m.text}</Body1>
+        {history.map((m, i) => (
+          <div
+            key={i}
+            className={`${styles.bubble} ${m.role === "user" ? styles.userBubble : ""}`}
+          >
+            <Body1>{m.content}</Body1>
           </div>
         ))}
         {loading && <Spinner size="small" label="Thinking…" />}
+        <div ref={bottomRef} />
       </div>
 
       <div className={styles.inputRow}>
@@ -110,7 +111,7 @@ export const App: React.FC = () => {
           <Textarea
             value={input}
             onChange={(_, d) => setInput(d.value)}
-            placeholder="Ask about your spreadsheet…"
+            placeholder="Ask about your spreadsheet… (Enter to send, Shift+Enter for newline)"
             resize="vertical"
             rows={3}
             onKeyDown={(e) => {

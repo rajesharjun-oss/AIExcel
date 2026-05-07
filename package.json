@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "addin",
-    "backend"
+    "backend",
+    "shared"
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=addin\"",

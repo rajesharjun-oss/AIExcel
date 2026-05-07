@@ -1,0 +1,12 @@
+{
+  "name": "@aiexcel/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/types.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.2"
+  }
+}
