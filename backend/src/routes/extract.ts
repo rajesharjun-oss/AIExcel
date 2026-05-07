@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
 import { callLLM, HAIKU } from "../llm/client";
 import { EXTRACT_SYSTEM, EXTRACT_VERSION, extractPrompt } from "../llm/prompts/extract_v1";
@@ -12,7 +13,7 @@ const Schema = z.object({
   field: z.string().min(1),
 });
 
-extractRouter.post("/", async (req, res) => {
+extractRouter.post("/", asyncRoute(async (req, res) => {
   const parsed = Schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -40,4 +41,4 @@ extractRouter.post("/", async (req, res) => {
   cacheSet(key, result, 86_400);
   const response: ExtractResponse = { result, cached: false };
   res.json(response);
-});
+}));

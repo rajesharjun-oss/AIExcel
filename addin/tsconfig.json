@@ -6,6 +6,7 @@
     "moduleResolution": "bundler",
     "jsx": "react",
     "lib": ["ES2020", "DOM"],
+    "types": ["office-js"],
     "outDir": "dist",
     "rootDir": "src",
     "noEmit": true

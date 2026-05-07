@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
 import { callLLM, HAIKU } from "../llm/client";
 import { CLEAN_SYSTEM, CLEAN_VERSION, cleanPrompt } from "../llm/prompts/clean_v1";
@@ -11,7 +12,7 @@ const Schema = z.object({
   text: z.string().min(1).max(2000),
 });
 
-cleanRouter.post("/", async (req, res) => {
+cleanRouter.post("/", asyncRoute(async (req, res) => {
   const parsed = Schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -39,4 +40,4 @@ cleanRouter.post("/", async (req, res) => {
   cacheSet(key, result, 86_400);
   const response: CleanResponse = { result, cached: false };
   res.json(response);
-});
+}));

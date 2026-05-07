@@ -3,6 +3,7 @@ import { z } from "zod";
 import { callLLM, HAIKU } from "../llm/client";
 import { CLASSIFY_SYSTEM, CLASSIFY_VERSION, classifyPrompt } from "../llm/prompts/classify_v1";
 import { cacheGet, cacheKey, cacheSet } from "../cache/sqlite";
+import { asyncRoute } from "../middleware/asyncRoute";
 import type { ClassifyRequest, ClassifyResponse } from "@aiexcel/shared";
 
 export const classifyRouter = Router();
@@ -12,7 +13,7 @@ const Schema = z.object({
   categories: z.string().min(1),
 });
 
-classifyRouter.post("/", async (req, res) => {
+classifyRouter.post("/", asyncRoute(async (req, res) => {
   const parsed = Schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -40,4 +41,4 @@ classifyRouter.post("/", async (req, res) => {
   cacheSet(key, result, 86_400);
   const response: ClassifyResponse = { result, cached: false };
   res.json(response);
-});
+}));

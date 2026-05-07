@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
 import { callLLM, HAIKU } from "../llm/client";
 import { ASK_SYSTEM, ASK_VERSION, askPrompt } from "../llm/prompts/ask_v1";
@@ -12,7 +13,7 @@ const Schema = z.object({
   context: z.record(z.unknown()).optional(),
 });
 
-askRouter.post("/", async (req, res) => {
+askRouter.post("/", asyncRoute(async (req, res) => {
   const parsed = Schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -44,4 +45,4 @@ askRouter.post("/", async (req, res) => {
   cacheSet(key, result, 3_600);
   const response: AskResponse = { result, cached: false };
   res.json(response);
-});
+}));

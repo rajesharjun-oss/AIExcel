@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
 import { callLLM, HAIKU } from "../llm/client";
 import { SUMMARIZE_SYSTEM, SUMMARIZE_VERSION, summarizePrompt } from "../llm/prompts/summarize_v1";
@@ -11,7 +12,7 @@ const Schema = z.object({
   texts: z.array(z.string()).min(1).max(500),
 });
 
-summarizeRouter.post("/", async (req, res) => {
+summarizeRouter.post("/", asyncRoute(async (req, res) => {
   const parsed = Schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -39,4 +40,4 @@ summarizeRouter.post("/", async (req, res) => {
   cacheSet(key, result, 3_600);
   const response: SummarizeResponse = { result, cached: false };
   res.json(response);
-});
+}));

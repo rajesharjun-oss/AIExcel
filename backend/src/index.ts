@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import { requestLogger, logger } from "./middleware/logging";
 import { rateLimit } from "./middleware/rateLimit";
@@ -37,6 +37,11 @@ app.use("/v1/summarize", summarizeRouter);
 app.use("/v1/ask", askRouter);
 app.use("/v1/chat", chatRouter);
 app.use("/v1/audit", auditRouter);
+
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error({ err: err.message, stack: err.stack }, "Unhandled error");
+  res.status(500).json({ error: "Internal server error" });
+});
 
 app.listen(PORT, () => {
   logger.info(`AIExcel backend listening on port ${PORT}`);

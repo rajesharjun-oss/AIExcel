@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { asyncRoute } from "../middleware/asyncRoute";
 import { z } from "zod";
 import { callChat, SONNET } from "../llm/client";
 import { chatSystem } from "../llm/prompts/chat_v1";
@@ -23,7 +24,7 @@ const Schema = z.object({
     .optional(),
 });
 
-chatRouter.post("/", async (req, res) => {
+chatRouter.post("/", asyncRoute(async (req, res) => {
   const parsed = Schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -42,4 +43,4 @@ chatRouter.post("/", async (req, res) => {
 
   const response: ChatResponse = { reply };
   res.json(response);
-});
+}));

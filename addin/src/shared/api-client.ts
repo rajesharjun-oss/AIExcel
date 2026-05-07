@@ -1,8 +1,15 @@
-const BACKEND_URL =
-  (typeof process !== "undefined" && process.env?.BACKEND_URL) ?? "http://localhost:3001";
+let baseUrl = "http://localhost:3001";
+
+export function setBaseUrl(url: string): void {
+  baseUrl = url;
+}
+
+export function getBaseUrl(): string {
+  return baseUrl;
+}
 
 export async function post<TResponse>(path: string, body: unknown): Promise<TResponse> {
-  const res = await fetch(`${BACKEND_URL}${path}`, {
+  const res = await fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
