@@ -1,0 +1,16 @@
+{
+  "name": "aiexcel-monorepo",
+  "private": true,
+  "workspaces": [
+    "addin",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=addin\"",
+    "build": "npm run build --workspace=backend && npm run build --workspace=addin",
+    "lint": "npm run lint --workspace=backend && npm run lint --workspace=addin"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
