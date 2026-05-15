@@ -76,6 +76,39 @@ export interface WorkbookContext {
     address: string;
     values: unknown[][];
   };
+  sheets?: WorkbookSheetContext[];
+  profile?: WorkbookProfile;
+  recentFindings?: AuditResult[];
+}
+
+export interface WorkbookSheetContext {
+  name: string;
+  address?: string;
+  headers: string[];
+  values: unknown[][];
+  formulas?: string[][];
+  rowCount: number;
+  columnCount: number;
+  truncated?: boolean;
+}
+
+export interface WorkbookProfile {
+  sheetCount: number;
+  totalRows: number;
+  totalColumns: number;
+  sheets: Array<{
+    name: string;
+    rows: number;
+    columns: number;
+    headers: string[];
+  }>;
+  relationshipHints: Array<{
+    leftSheet: string;
+    leftColumn: string;
+    rightSheet: string;
+    rightColumn: string;
+    reason: string;
+  }>;
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────

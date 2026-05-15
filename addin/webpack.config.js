@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const path = require("path");
+const fs = require("fs");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 
 const devCerts = (() => {
@@ -32,7 +33,16 @@ module.exports = async (env, options) => {
     },
     module: {
       rules: [
-        { test: /\.tsx?$/, use: "ts-loader", exclude: /node_modules/ },
+        {
+          test: /\.tsx?$/,
+          use: {
+            loader: "ts-loader",
+            options: {
+              compilerOptions: { noEmit: false },
+            },
+          },
+          exclude: /node_modules/,
+        },
         { test: /\.css$/, use: ["style-loader", "css-loader"] },
       ],
     },
@@ -42,6 +52,27 @@ module.exports = async (env, options) => {
         template: "./src/taskpane/taskpane.html",
         chunks: ["taskpane"],
       }),
+      new HtmlWebpackPlugin({
+        filename: "functions.html",
+        template: "./src/functions/functions.html",
+        chunks: ["functions"],
+      }),
+      {
+        apply(compiler) {
+          compiler.hooks.thisCompilation.tap("CopyFunctionsMetadata", (compilation) => {
+            compilation.hooks.processAssets.tap(
+              {
+                name: "CopyFunctionsMetadata",
+                stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL,
+              },
+              () => {
+                const source = fs.readFileSync(path.resolve(__dirname, "src/functions/functions.json"), "utf8");
+                compilation.emitAsset("functions.json", new compiler.webpack.sources.RawSource(source));
+              }
+            );
+          });
+        },
+      },
     ],
     devServer: {
       port: 3000,

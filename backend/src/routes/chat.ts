@@ -14,14 +14,7 @@ const MessageSchema = z.object({
 
 const Schema = z.object({
   messages: z.array(MessageSchema).min(1).max(50),
-  workbookContext: z
-    .object({
-      activeSheet: z.string().optional(),
-      selection: z
-        .object({ address: z.string(), values: z.array(z.array(z.unknown())) })
-        .optional(),
-    })
-    .optional(),
+  workbookContext: z.record(z.unknown()).optional(),
 });
 
 chatRouter.post("/", asyncRoute(async (req, res) => {

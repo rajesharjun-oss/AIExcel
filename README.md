@@ -27,7 +27,14 @@ npm run dev:web
 
 ## Office Add-in Scaffold
 
-The existing add-in/backend code remains in place for the fuller embedded Excel experience.
+The existing add-in/backend code remains in place for the fuller embedded Excel experience. The taskpane now includes workbook-wide tools:
+
+- Index workbook sheets and build a compact profile.
+- Find duplicate rows across sheets.
+- Find missing values, mixed column types, sparse rows, formula errors, and hardcoded formula numbers.
+- Search all sheets from the taskpane.
+- Clean the selected range by trimming and normalising whitespace.
+- Send richer workbook context and recent findings to the backend chat route.
 
 ```bash
 npm install
