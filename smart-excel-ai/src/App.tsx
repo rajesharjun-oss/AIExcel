@@ -464,6 +464,21 @@ function SheetPreview({
   const focusCell = (rowIndex: number, columnIndex: number) => {
     const selector = `[data-cell="${sheet.name}-${rowIndex}-${columnIndex}"]`;
     const next = document.querySelector<HTMLInputElement>(selector);
+    const scroller = next?.closest<HTMLElement>('.table-wrap');
+    if (next && scroller) {
+      const cellRect = next.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      if (cellRect.right > scrollerRect.right) {
+        scroller.scrollLeft += cellRect.right - scrollerRect.right + 12;
+      } else if (cellRect.left < scrollerRect.left) {
+        scroller.scrollLeft -= scrollerRect.left - cellRect.left + 12;
+      }
+      if (cellRect.bottom > scrollerRect.bottom) {
+        scroller.scrollTop += cellRect.bottom - scrollerRect.bottom + 12;
+      } else if (cellRect.top < scrollerRect.top) {
+        scroller.scrollTop -= scrollerRect.top - cellRect.top + 12;
+      }
+    }
     next?.focus();
     next?.select();
   };
@@ -482,10 +497,10 @@ function SheetPreview({
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       moveFocus(rowIndex, columnIndex, -1, 0);
-    } else if (event.key === 'ArrowRight' && event.currentTarget.selectionStart === event.currentTarget.value.length) {
+    } else if (event.key === 'ArrowRight') {
       event.preventDefault();
       moveFocus(rowIndex, columnIndex, 0, 1);
-    } else if (event.key === 'ArrowLeft' && event.currentTarget.selectionStart === 0) {
+    } else if (event.key === 'ArrowLeft') {
       event.preventDefault();
       moveFocus(rowIndex, columnIndex, 0, -1);
     } else if (event.key === 'Tab') {

@@ -229,6 +229,30 @@ const run = async () => {
     assert.ok(collapsed.sheetRailWidth <= 60, `sheet rail width was ${collapsed.sheetRailWidth}`);
     assert.ok(collapsed.assistantWidth <= 60, `assistant width was ${collapsed.assistantWidth}`);
 
+    const horizontalScroll = await page.evaluate(async () => {
+      const wrapper = document.querySelector<HTMLElement>('.table-wrap');
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-1-0"]');
+      if (!wrapper || !cell) throw new Error('scroll test target not found');
+      wrapper.scrollLeft = 0;
+      cell.focus();
+      cell.setSelectionRange(cell.value.length, cell.value.length);
+      for (let index = 0; index < 20; index += 1) {
+        const active = document.activeElement as HTMLInputElement | null;
+        active?.setSelectionRange(active.value.length, active.value.length);
+        active?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+      }
+      return {
+        scrollLeft: wrapper.scrollLeft,
+        scrollWidth: wrapper.scrollWidth,
+        clientWidth: wrapper.clientWidth,
+        activeCell: (document.activeElement as HTMLElement | null)?.getAttribute('data-cell')
+      };
+    });
+    assert.ok(horizontalScroll.scrollWidth > horizontalScroll.clientWidth, `expected grid overflow: ${JSON.stringify(horizontalScroll)}`);
+    assert.ok(horizontalScroll.scrollLeft > 0, `expected horizontal scroll: ${JSON.stringify(horizontalScroll)}`);
+    assert.equal(horizontalScroll.activeCell, 'Sheet1-1-20');
+
     const csv = await readFile(fixturePath('sample_dirty_data.csv'), 'utf8');
     await page.evaluate(async (csvText: string) => {
       const input = document.querySelector<HTMLInputElement>('input[type="file"]');
@@ -340,11 +364,12 @@ const run = async () => {
     console.log('ok 4 - browser cell editing updates visible value');
     console.log('ok 5 - browser multi-cell paste fills the right range');
     console.log('ok 6 - browser arrow and enter keyboard movement changes active cell');
-    console.log('ok 7 - browser shortcut-style replacement works inside a cell input');
-    console.log('ok 8 - browser clean action enables export after edits');
+    console.log('ok 7 - browser keyboard movement scrolls hidden columns into view');
+    console.log('ok 8 - browser shortcut-style replacement works inside a cell input');
+    console.log('ok 9 - browser clean action enables export after edits');
     console.log('');
-    console.log('tests 8');
-    console.log('pass 8');
+    console.log('tests 9');
+    console.log('pass 9');
     console.log('fail 0');
   } finally {
     killTree(chrome);
@@ -355,7 +380,7 @@ const run = async () => {
 run().catch((error) => {
   console.error(error);
   console.log('');
-  console.log('tests 8');
+  console.log('tests 9');
   console.log('pass 0');
   console.log('fail 1');
   process.exitCode = 1;

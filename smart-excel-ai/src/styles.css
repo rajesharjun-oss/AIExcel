@@ -373,6 +373,7 @@ input:disabled {
 }
 
 table {
+  width: max-content;
   min-width: 100%;
   border-collapse: collapse;
   font-size: 0.88rem;
@@ -388,6 +389,13 @@ td {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+th:not(.row-number),
+td:not(.row-number) {
+  min-width: 150px;
+  width: 150px;
+  max-width: 150px;
 }
 
 th {
