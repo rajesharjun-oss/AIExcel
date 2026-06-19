@@ -197,6 +197,19 @@ const rowPreview = (sheet: SheetData, rowIndex: number): string => {
     .join(' | ');
 };
 
+const findColumnIndex = (sheet: SheetData, patterns: RegExp[]): number =>
+  sheet.headers.findIndex((header) => patterns.some((pattern) => pattern.test(normalizeText(header))));
+
+export const parseNumericValue = (value: CellValue | undefined): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const text = cellToText(value).trim();
+  if (!text) return null;
+  const normalized = text.replace(/[,\s]/g, '').replace(/^[\u20a6$\u20ac\u00a3]/, '');
+  if (!/^-?\d+(\.\d+)?$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export const findDuplicates = (workbook: WorkbookModel): Finding[] => {
   const seen = new Map<string, Array<{ sheet: SheetData; rowIndex: number }>>();
 
@@ -279,7 +292,83 @@ export const findInconsistencies = (workbook: WorkbookModel): Finding[] => {
           suggestion: 'Confirm whether this column is optional. If it is important, fill or remove incomplete records.'
         });
       }
+
+      if (/(required|ref|reference|id|number|code)/.test(normalizeText(header))) {
+        sheet.rows.slice(sheet.dataStartIndex).forEach((row, offset) => {
+          if (!isBlank(row[columnIndex])) return;
+          const rowIndex = sheet.dataStartIndex + offset;
+          findings.push({
+            id: `required-blank-${sheet.name}-${columnIndex}-${rowIndex}`,
+            type: 'missing',
+            severity: 'high',
+            title: 'Blank required field',
+            sheetName: sheet.name,
+            rows: [rowIndex + 1],
+            columns: [header],
+            detail: `${header} is blank on row ${rowIndex + 1}.`,
+            suggestion: 'Fill the required value or flag the row for review before analysis.',
+            preview: [rowPreview(sheet, rowIndex)]
+          });
+        });
+      }
     });
+
+    const amountIndex = findColumnIndex(sheet, [/amount/, /debit/, /credit/, /value/]);
+    if (amountIndex >= 0) {
+      const amountEntries = sheet.rows
+        .slice(sheet.dataStartIndex)
+        .map((row, offset) => ({
+          rowIndex: sheet.dataStartIndex + offset,
+          value: row[amountIndex],
+          parsed: parseNumericValue(row[amountIndex])
+        }))
+        .filter((entry) => !isBlank(entry.value));
+
+      amountEntries
+        .filter((entry) => entry.parsed === null)
+        .slice(0, 20)
+        .forEach((entry) => {
+          findings.push({
+            id: `invalid-number-${sheet.name}-${entry.rowIndex}`,
+            type: 'inconsistency',
+            severity: 'high',
+            title: 'Invalid number in amount column',
+            sheetName: sheet.name,
+            rows: [entry.rowIndex + 1],
+            columns: [sheet.headers[amountIndex]],
+            detail: `${sheet.headers[amountIndex]} contains "${cellToText(entry.value)}", which cannot be read as a number.`,
+            suggestion: 'Correct the value before categorizing, reconciling, or exporting totals.',
+            preview: [rowPreview(sheet, entry.rowIndex)]
+          });
+        });
+
+      const typicalAmounts = amountEntries
+        .map((entry) => entry.parsed)
+        .filter((value): value is number => value !== null)
+        .map(Math.abs)
+        .sort((a, b) => a - b);
+
+      if (typicalAmounts.length >= 5) {
+        const median = typicalAmounts[Math.floor(typicalAmounts.length / 2)] || 0;
+        amountEntries
+          .filter((entry) => entry.parsed !== null && median > 0 && Math.abs(entry.parsed) >= median * 10)
+          .slice(0, 20)
+          .forEach((entry) => {
+            findings.push({
+              id: `outlier-${sheet.name}-${entry.rowIndex}`,
+              type: 'inconsistency',
+              severity: 'medium',
+              title: 'Unusual amount',
+              sheetName: sheet.name,
+              rows: [entry.rowIndex + 1],
+              columns: [sheet.headers[amountIndex]],
+              detail: `${sheet.headers[amountIndex]} is much larger than the typical amount in this sheet.`,
+              suggestion: 'Confirm this is not an extra zero, wrong currency, or imported total row.',
+              preview: [rowPreview(sheet, entry.rowIndex)]
+            });
+          });
+      }
+    }
 
     sheet.rows.forEach((row, rowIndex) => {
       if (rowIndex <= sheet.headerRowIndex) return;
@@ -389,6 +478,12 @@ export const cleanRows = (sheet: SheetData): CellValue[][] =>
     row.map((cell) => {
       if (typeof cell !== 'string') return cell;
       const cleaned = cell.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+      const dateMatch = cleaned.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
+      if (dateMatch) {
+        const [, day, month, year] = dateMatch;
+        const fullYear = year.length === 2 ? `20${year}` : year;
+        return `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
       if (/^-?[\d,]+(\.\d+)?$/.test(cleaned)) return Number(cleaned.replace(/,/g, ''));
       return cleaned;
     })
@@ -423,12 +518,20 @@ export const createCleaningFindings = (workbook: WorkbookModel): Finding[] => {
   return findings;
 };
 
-export const downloadCleanWorkbook = (workbook: WorkbookModel): void => {
+export const buildCleanWorkbook = (workbook: WorkbookModel): XLSX.WorkBook => {
   const output = XLSX.utils.book_new();
   workbook.sheets.forEach((sheet) => {
     const worksheet = XLSX.utils.aoa_to_sheet(cleanRows(sheet));
     XLSX.utils.book_append_sheet(output, worksheet, sheet.name.slice(0, 31));
   });
+  return output;
+};
+
+export const cleanWorkbookToArrayBuffer = (workbook: WorkbookModel): ArrayBuffer =>
+  XLSX.write(buildCleanWorkbook(workbook), { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+export const downloadCleanWorkbook = (workbook: WorkbookModel): void => {
+  const output = buildCleanWorkbook(workbook);
   const baseName = workbook.fileName.replace(/\.[^.]+$/, '');
   XLSX.writeFile(output, `${baseName || 'workbook'}_cleaned.xlsx`);
 };

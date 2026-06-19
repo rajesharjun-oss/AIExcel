@@ -1,0 +1,306 @@
+import assert from 'node:assert/strict';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fixturePath } from '../helpers/workbook-fixtures';
+
+type PendingCall = {
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+};
+
+const port = Number(process.env.E2E_PORT || 5200 + Math.floor(Math.random() * 500));
+const chromePort = Number(process.env.E2E_CHROME_PORT || 9300 + Math.floor(Math.random() * 500));
+const appUrl = `http://127.0.0.1:${port}/`;
+const chromeCandidates = [
+  process.env.CHROME_PATH,
+  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+].filter(Boolean) as string[];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const killTree = (child: ChildProcessWithoutNullStreams | undefined) => {
+  if (!child?.pid || child.killed) return;
+  if (process.platform === 'win32') {
+    spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+  } else {
+    child.kill('SIGTERM');
+  }
+};
+
+const waitForHttp = async (url: string, timeoutMs = 30_000) => {
+  const started = Date.now();
+  let lastError: unknown;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return;
+    } catch (error) {
+      lastError = error;
+    }
+    await sleep(500);
+  }
+  throw new Error(`Timed out waiting for ${url}: ${lastError instanceof Error ? lastError.message : 'no response'}`);
+};
+
+const findChrome = () => {
+  const chrome = chromeCandidates.find((candidate) => existsSync(candidate));
+  if (!chrome) {
+    throw new Error('Chrome was not found. Set CHROME_PATH to the Chrome or Chromium executable.');
+  }
+  return chrome;
+};
+
+const startVite = (): ChildProcessWithoutNullStreams => {
+  const child = spawn('cmd.exe', ['/c', 'npm', 'run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)], {
+    cwd: process.cwd(),
+    stdio: 'pipe',
+    windowsHide: true
+  });
+  child.stdout.on('data', (chunk) => process.stdout.write(`[vite] ${chunk}`));
+  child.stderr.on('data', (chunk) => process.stderr.write(`[vite] ${chunk}`));
+  return child;
+};
+
+const startChrome = (): ChildProcessWithoutNullStreams => {
+  const userDataDir = path.join(process.cwd(), 'tests-dist', 'chrome-profile');
+  rmSync(userDataDir, { recursive: true, force: true });
+  mkdirSync(userDataDir, { recursive: true });
+  return spawn(
+    findChrome(),
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-background-networking',
+      '--disable-dev-shm-usage',
+      '--remote-allow-origins=*',
+      `--remote-debugging-port=${chromePort}`,
+      `--user-data-dir=${userDataDir}`,
+      'about:blank'
+    ],
+    {
+      stdio: 'pipe',
+      windowsHide: true
+    }
+  );
+};
+
+class CdpPage {
+  private nextId = 1;
+  private pending = new Map<number, PendingCall>();
+
+  constructor(private readonly socket: WebSocket) {
+    socket.addEventListener('message', (event) => {
+      const message = JSON.parse(String(event.data));
+      if (!message.id) return;
+      const call = this.pending.get(message.id);
+      if (!call) return;
+      this.pending.delete(message.id);
+      if (message.error) {
+        call.reject(new Error(message.error.message));
+      } else {
+        call.resolve(message.result);
+      }
+    });
+  }
+
+  send(method: string, params: Record<string, unknown> = {}) {
+    const id = this.nextId;
+    this.nextId += 1;
+    this.socket.send(JSON.stringify({ id, method, params }));
+    return new Promise<any>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+    });
+  }
+
+  async evaluate<T>(fn: (...args: any[]) => T | Promise<T>, ...args: any[]): Promise<T> {
+    const expression = `(${fn.toString()})(...${JSON.stringify(args)})`;
+    const result = await this.send('Runtime.evaluate', {
+      expression,
+      awaitPromise: true,
+      returnByValue: true
+    });
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.text || 'Browser evaluation failed');
+    }
+    return result.result?.value as T;
+  }
+}
+
+const connectPage = async (): Promise<CdpPage> => {
+  await waitForHttp(`http://127.0.0.1:${chromePort}/json/version`);
+  const target = await fetch(`http://127.0.0.1:${chromePort}/json/new?${encodeURIComponent(appUrl)}`, { method: 'PUT' }).then((r) => r.json() as any);
+  const socket = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Timed out connecting to Chrome DevTools websocket')), 10_000);
+    socket.addEventListener('open', () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+    socket.addEventListener('error', () => reject(new Error('Could not connect to Chrome DevTools')), { once: true });
+  });
+  const page = new CdpPage(socket);
+  await page.send('Runtime.enable');
+  await page.send('Page.enable');
+  await page.send('DOM.enable');
+  return page;
+};
+
+const run = async () => {
+  const vite = startVite();
+  let chrome: ChildProcessWithoutNullStreams | undefined;
+  try {
+    await waitForHttp(appUrl);
+    chrome = startChrome();
+    chrome.stderr.on('data', (chunk) => process.stderr.write(`[chrome] ${chunk}`));
+    chrome.stdout.on('data', (chunk) => process.stdout.write(`[chrome] ${chunk}`));
+    const page = await connectPage();
+    await page.send('Page.navigate', { url: appUrl });
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const tick = () => {
+          if (document.querySelector('input[type="file"]')) {
+            resolve();
+          } else if (Date.now() - started > 10_000) {
+            reject(new Error('app did not render file input'));
+          } else {
+            window.setTimeout(tick, 100);
+          }
+        };
+        tick();
+      });
+    });
+
+    const csv = await readFile(fixturePath('sample_dirty_data.csv'), 'utf8');
+    await page.evaluate(async (csvText: string) => {
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (!input) throw new Error('file input not found');
+      const file = new File([csvText], 'sample_dirty_data.csv', { type: 'text/csv' });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const tick = () => {
+          if (document.querySelector('[data-cell="Sheet1-1-1"]')) {
+            resolve();
+          } else if (Date.now() - started > 10_000) {
+            reject(new Error('grid did not render after upload'));
+          } else {
+            window.setTimeout(tick, 100);
+          }
+        };
+        tick();
+      });
+    }, csv);
+
+    const loaded = await page.evaluate(() => ({
+      sheetTitle: document.querySelector('.sheet-summary h2')?.textContent,
+      firstCell: (document.querySelector('[data-cell="Sheet1-1-1"]') as HTMLInputElement | null)?.value,
+      rows: document.querySelectorAll('.grid-cell-input').length
+    }));
+    assert.equal(loaded.sheetTitle, 'Sheet1');
+    assert.equal(loaded.firstCell, '  FIRS payment  ');
+    assert.ok(loaded.rows > 20);
+
+    await page.evaluate(() => {
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-1-1"]');
+      if (!cell) throw new Error('editable cell not found');
+      cell.focus();
+      cell.select();
+      cell.value = 'Edited FIRS payment';
+      cell.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const edited = await page.evaluate(() => (document.querySelector('[data-cell="Sheet1-1-1"]') as HTMLInputElement).value);
+    assert.equal(edited, 'Edited FIRS payment');
+
+    await page.evaluate(() => {
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-2-1"]');
+      if (!cell) throw new Error('paste target not found');
+      cell.focus();
+      const transfer = new DataTransfer();
+      transfer.setData('text/plain', 'Alpha\t10\nBeta\t20');
+      cell.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer }));
+    });
+    const pasted = await page.evaluate(() => ({
+      a: (document.querySelector('[data-cell="Sheet1-2-1"]') as HTMLInputElement).value,
+      b: (document.querySelector('[data-cell="Sheet1-2-2"]') as HTMLInputElement).value,
+      c: (document.querySelector('[data-cell="Sheet1-3-1"]') as HTMLInputElement).value,
+      d: (document.querySelector('[data-cell="Sheet1-3-2"]') as HTMLInputElement).value
+    }));
+    assert.deepEqual(pasted, { a: 'Alpha', b: '10', c: 'Beta', d: '20' });
+
+    await page.evaluate(async () => {
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-2-2"]');
+      if (!cell) throw new Error('keyboard target not found');
+      cell.focus();
+      cell.setSelectionRange(cell.value.length, cell.value.length);
+      cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+    });
+    const activeAfterArrow = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-cell'));
+    assert.equal(activeAfterArrow, 'Sheet1-2-3');
+
+    await page.evaluate(async () => {
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-2-3"]');
+      if (!cell) throw new Error('enter target not found');
+      cell.focus();
+      cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await new Promise((resolve) => window.setTimeout(resolve, 80));
+    });
+    const activeAfterEnter = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-cell'));
+    assert.equal(activeAfterEnter, 'Sheet1-3-3');
+
+    const ctrlAResult = await page.evaluate(() => {
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-3-3"]');
+      if (!cell) throw new Error('shortcut target not found');
+      cell.focus();
+      cell.setSelectionRange(0, cell.value.length);
+      cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }));
+      document.execCommand('insertText', false, 'Shortcut replacement');
+      return cell.value;
+    });
+    assert.equal(ctrlAResult, 'Shortcut replacement');
+
+    await page.evaluate(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('Clean Data')) as HTMLButtonElement | undefined;
+      if (!button) throw new Error('Clean Data button not found');
+      button.click();
+    });
+    const cleanButtonEnabled = await page.evaluate(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('Download Cleaned')) as HTMLButtonElement | undefined;
+      return Boolean(button && !button.disabled);
+    });
+    assert.equal(cleanButtonEnabled, true);
+
+    console.log('ok 1 - browser upload renders editable grid');
+    console.log('ok 2 - browser cell editing updates visible value');
+    console.log('ok 3 - browser multi-cell paste fills the right range');
+    console.log('ok 4 - browser arrow and enter keyboard movement changes active cell');
+    console.log('ok 5 - browser shortcut-style replacement works inside a cell input');
+    console.log('ok 6 - browser clean action enables export after edits');
+    console.log('');
+    console.log('tests 6');
+    console.log('pass 6');
+    console.log('fail 0');
+  } finally {
+    killTree(chrome);
+    killTree(vite);
+  }
+};
+
+run().catch((error) => {
+  console.error(error);
+  console.log('');
+  console.log('tests 6');
+  console.log('pass 0');
+  console.log('fail 1');
+  process.exitCode = 1;
+});

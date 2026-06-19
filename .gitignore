@@ -1,8 +1,10 @@
 node_modules/
 dist/
 build/
+tests-dist/
 .env
 .env.local
+*.log
 *.tsbuildinfo
 *.sqlite
 certs/

@@ -1,0 +1,14 @@
+{
+  "totalRows": 7,
+  "categorizedRows": 4,
+  "uncategorizedRows": 3,
+  "invalidAmountRows": 2,
+  "totalBefore": 6550,
+  "totalAfter": 6550,
+  "categories": {
+    "FIRS": 1,
+    "SIRS": 2,
+    "Bank Charges": 1,
+    "Unallocated": 3
+  }
+}

@@ -14,8 +14,9 @@ import {
   UploadCloud,
   Wand2
 } from 'lucide-react';
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useMemo, useRef, useState } from 'react';
 import { askWorkbookAi, userMessage } from './lib/assistant';
+import { pasteCells, updateCell } from './lib/grid-edit';
 import {
   buildWorkbookProfile,
   cellToText,
@@ -99,6 +100,16 @@ function App() {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
     if (file) void handleFile(file);
+  };
+
+  const editCell = (sheetName: string, rowIndex: number, columnIndex: number, value: string) => {
+    setCleanReady(false);
+    setWorkbook((current) => (current ? updateCell(current, sheetName, rowIndex, columnIndex, value) : current));
+  };
+
+  const pasteIntoCell = (sheetName: string, rowIndex: number, columnIndex: number, text: string) => {
+    setCleanReady(false);
+    setWorkbook((current) => (current ? pasteCells(current, sheetName, rowIndex, columnIndex, text) : current));
   };
 
   const runAction = (action: ActionKey) => {
@@ -259,7 +270,7 @@ function App() {
           {workbook && activeSheet ? (
             <>
               <SheetSummary sheet={activeSheet} />
-              <SheetPreview sheet={activeSheet} />
+              <SheetPreview sheet={activeSheet} onEditCell={editCell} onPasteCells={pasteIntoCell} />
             </>
           ) : (
             <UploadPanel isParsing={isParsing} onDrop={handleDrop} onBrowse={() => fileInputRef.current?.click()} />
@@ -359,9 +370,57 @@ function SheetSummary({ sheet }: { sheet: SheetData }) {
   );
 }
 
-function SheetPreview({ sheet }: { sheet: SheetData }) {
+function SheetPreview({
+  sheet,
+  onEditCell,
+  onPasteCells
+}: {
+  sheet: SheetData;
+  onEditCell: (sheetName: string, rowIndex: number, columnIndex: number, value: string) => void;
+  onPasteCells: (sheetName: string, rowIndex: number, columnIndex: number, text: string) => void;
+}) {
   const rows = sheet.rows.slice(sheet.dataStartIndex, sheet.dataStartIndex + 75);
   const headers = sheet.headers.slice(0, Math.max(1, sheet.columnCount));
+  const focusCell = (rowIndex: number, columnIndex: number) => {
+    const selector = `[data-cell="${sheet.name}-${rowIndex}-${columnIndex}"]`;
+    const next = document.querySelector<HTMLInputElement>(selector);
+    next?.focus();
+    next?.select();
+  };
+
+  const moveFocus = (rowIndex: number, columnIndex: number, rowDelta: number, columnDelta: number) => {
+    const nextRowIndex = Math.max(sheet.dataStartIndex, rowIndex + rowDelta);
+    const nextColumnIndex = Math.max(0, columnIndex + columnDelta);
+    window.requestAnimationFrame(() => focusCell(nextRowIndex, nextColumnIndex));
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>, rowIndex: number, columnIndex: number) => {
+    if (event.ctrlKey || event.metaKey) return;
+    if (event.key === 'Enter' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveFocus(rowIndex, columnIndex, 1, 0);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveFocus(rowIndex, columnIndex, -1, 0);
+    } else if (event.key === 'ArrowRight' && event.currentTarget.selectionStart === event.currentTarget.value.length) {
+      event.preventDefault();
+      moveFocus(rowIndex, columnIndex, 0, 1);
+    } else if (event.key === 'ArrowLeft' && event.currentTarget.selectionStart === 0) {
+      event.preventDefault();
+      moveFocus(rowIndex, columnIndex, 0, -1);
+    } else if (event.key === 'Tab') {
+      event.preventDefault();
+      moveFocus(rowIndex, columnIndex, event.shiftKey ? 0 : 0, event.shiftKey ? -1 : 1);
+    }
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLInputElement>, rowIndex: number, columnIndex: number) => {
+    const text = event.clipboardData.getData('text/plain');
+    if (!text.includes('\t') && !/[\r\n]/.test(text)) return;
+    event.preventDefault();
+    onPasteCells(sheet.name, rowIndex, columnIndex, text);
+    window.requestAnimationFrame(() => focusCell(rowIndex, columnIndex));
+  };
 
   return (
     <div className="table-wrap">
@@ -380,7 +439,17 @@ function SheetPreview({ sheet }: { sheet: SheetData }) {
               <tr key={`${sheet.name}-${rowIndex}`}>
                 <td className="row-number">{sheet.dataStartIndex + rowIndex + 1}</td>
                 {headers.map((_, columnIndex) => (
-                  <td key={`${sheet.name}-${rowIndex}-${columnIndex}`}>{cellToText(row[columnIndex])}</td>
+                  <td key={`${sheet.name}-${rowIndex}-${columnIndex}`}>
+                    <input
+                      aria-label={`${sheet.name} row ${sheet.dataStartIndex + rowIndex + 1} column ${columnIndex + 1}`}
+                      className="grid-cell-input"
+                      data-cell={`${sheet.name}-${sheet.dataStartIndex + rowIndex}-${columnIndex}`}
+                      value={cellToText(row[columnIndex])}
+                      onChange={(event) => onEditCell(sheet.name, sheet.dataStartIndex + rowIndex, columnIndex, event.target.value)}
+                      onKeyDown={(event) => handleKeyDown(event, sheet.dataStartIndex + rowIndex, columnIndex)}
+                      onPaste={(event) => handlePaste(event, sheet.dataStartIndex + rowIndex, columnIndex)}
+                    />
+                  </td>
                 ))}
               </tr>
             ))

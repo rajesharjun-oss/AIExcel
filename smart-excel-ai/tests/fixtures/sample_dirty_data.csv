@@ -1,0 +1,8 @@
+Date,Description,Name,Amount,Required Ref,Notes
+01/02/2026,  FIRS payment  ,Acme Limited,1000,REF-001,keep
+02/02/2026,LIRS tax remittance,Acme Limited,2000,,trim spaces
+03/02/2026,Bank charge monthly,Acme Ltd,50,REF-003,unchanged
+04/02/2026,Unusual supplier payment,Acme Limited,50000,REF-004,outlier
+05/02/2026,Invalid amount row,Acme Limited,abc,REF-005,review
+06/02/2026,Normal service fee,Acme Limited,1200,REF-006,preserve
+07/02/2026,Normal service fee,Acme Limited,1200,REF-006,preserve

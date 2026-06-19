@@ -68,3 +68,31 @@ export type AssistantMessage = {
   text: string;
   findings?: Finding[];
 };
+
+export type RuleDefinition = {
+  id: string;
+  name: string;
+  matchColumn: string;
+  contains: string[];
+  category: string;
+};
+
+export type RuleResultRow = {
+  rowNumber: number;
+  category: string;
+  matchedRuleId?: string;
+  reviewFlags: string[];
+  amount: number | null;
+  values: Record<string, CellValue>;
+};
+
+export type RuleAnalysisResult = {
+  sheetName: string;
+  totalRows: number;
+  categorizedRows: number;
+  uncategorizedRows: number;
+  invalidAmountRows: number;
+  totalBefore: number;
+  totalAfter: number;
+  rows: RuleResultRow[];
+};

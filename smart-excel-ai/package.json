@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5177",
     "build": "tsc && vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 4177"
+    "preview": "vite preview --host 0.0.0.0 --port 4177",
+    "test": "tsc -p tsconfig.test.json && node -e \"require('fs').writeFileSync('tests-dist/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node tests-dist/tests/run-tests.js",
+    "test:e2e": "tsc -p tsconfig.test.json && node -e \"require('fs').writeFileSync('tests-dist/package.json', '{\\\"type\\\":\\\"commonjs\\\"}')\" && node tests-dist/tests/e2e/browser-grid.e2e.js",
+    "test:all": "npm run test && npm run test:e2e"
   },
   "dependencies": {
     "lucide-react": "^0.562.0",

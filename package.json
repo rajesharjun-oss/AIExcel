@@ -11,6 +11,9 @@
     "dev:web": "npm --prefix smart-excel-ai run dev",
     "build": "npm run build --workspace=backend && npm run build --workspace=addin",
     "build:web": "npm --prefix smart-excel-ai run build",
+    "test": "npm --prefix smart-excel-ai test",
+    "test:e2e": "npm --prefix smart-excel-ai run test:e2e",
+    "test:all": "npm --prefix smart-excel-ai run test:all",
     "lint": "npm run lint --workspace=backend && npm run lint --workspace=addin"
   },
   "devDependencies": {

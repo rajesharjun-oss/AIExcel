@@ -1,0 +1,8 @@
+Date,Description,Amount
+2026-02-01,FIRS tax payment,1000
+2026-02-02,LIRS remittance,2000
+2026-02-03,State IRS assessment,3000
+2026-02-04,Bank charge monthly,50
+2026-02-05,Unknown vendor,500
+2026-02-06,Invalid amount,abc
+2026-02-07,Blank amount,
