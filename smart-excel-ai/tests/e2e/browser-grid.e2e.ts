@@ -203,10 +203,18 @@ const run = async () => {
     const blankWorkbook = await page.evaluate(() => ({
       title: document.querySelector('.sheet-summary h2')?.textContent,
       columns: document.querySelectorAll('thead th').length - 1,
+      rows: document.querySelectorAll('tbody tr').length,
+      firstHeader: document.querySelectorAll('thead th')[1]?.textContent,
+      lastHeader: document.querySelectorAll('thead th')[52]?.textContent,
+      rowNumbers: Array.from(document.querySelectorAll('tbody .row-number')).slice(0, 5).map((item) => item.textContent),
       firstBlank: (document.querySelector('[data-cell="Sheet1-1-0"]') as HTMLInputElement | null)?.value
     }));
     assert.equal(blankWorkbook.title, 'Sheet1');
-    assert.equal(blankWorkbook.columns, 26);
+    assert.equal(blankWorkbook.columns, 52);
+    assert.equal(blankWorkbook.rows, 500);
+    assert.equal(blankWorkbook.firstHeader, 'A');
+    assert.equal(blankWorkbook.lastHeader, 'AZ');
+    assert.deepEqual(blankWorkbook.rowNumbers, ['1', '2', '3', '4', '5']);
     assert.equal(blankWorkbook.firstBlank, '');
 
     const collapsed = await page.evaluate(async () => {
@@ -236,7 +244,7 @@ const run = async () => {
       wrapper.scrollLeft = 0;
       cell.focus();
       cell.setSelectionRange(cell.value.length, cell.value.length);
-      for (let index = 0; index < 20; index += 1) {
+      for (let index = 0; index < 40; index += 1) {
         const active = document.activeElement as HTMLInputElement | null;
         active?.setSelectionRange(active.value.length, active.value.length);
         active?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -251,7 +259,31 @@ const run = async () => {
     });
     assert.ok(horizontalScroll.scrollWidth > horizontalScroll.clientWidth, `expected grid overflow: ${JSON.stringify(horizontalScroll)}`);
     assert.ok(horizontalScroll.scrollLeft > 0, `expected horizontal scroll: ${JSON.stringify(horizontalScroll)}`);
-    assert.equal(horizontalScroll.activeCell, 'Sheet1-1-20');
+    const horizontalColumnIndex = Number(horizontalScroll.activeCell?.split('-')[2]);
+    assert.ok(horizontalColumnIndex >= 38, `expected horizontal navigation to move deep into the sheet: ${JSON.stringify(horizontalScroll)}`);
+
+    const verticalScroll = await page.evaluate(async () => {
+      const wrapper = document.querySelector<HTMLElement>('.table-wrap');
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-1-0"]');
+      if (!wrapper || !cell) throw new Error('vertical scroll test target not found');
+      wrapper.scrollTop = 0;
+      cell.focus();
+      for (let index = 0; index < 120; index += 1) {
+        const active = document.activeElement as HTMLInputElement | null;
+        active?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+        await new Promise((resolve) => window.setTimeout(resolve, 20));
+      }
+      return {
+        scrollTop: wrapper.scrollTop,
+        scrollHeight: wrapper.scrollHeight,
+        clientHeight: wrapper.clientHeight,
+        activeCell: (document.activeElement as HTMLElement | null)?.getAttribute('data-cell')
+      };
+    });
+    assert.ok(verticalScroll.scrollHeight > verticalScroll.clientHeight, `expected grid vertical overflow: ${JSON.stringify(verticalScroll)}`);
+    assert.ok(verticalScroll.scrollTop > 0, `expected vertical scroll: ${JSON.stringify(verticalScroll)}`);
+    const verticalRowIndex = Number(verticalScroll.activeCell?.split('-')[1]);
+    assert.ok(verticalRowIndex >= 90, `expected vertical navigation to move deep into the sheet: ${JSON.stringify(verticalScroll)}`);
 
     const csv = await readFile(fixturePath('sample_dirty_data.csv'), 'utf8');
     await page.evaluate(async (csvText: string) => {
@@ -358,13 +390,13 @@ const run = async () => {
     });
     assert.equal(cleanButtonEnabled, true);
 
-    console.log('ok 1 - browser creates built-in blank workbook');
+    console.log('ok 1 - browser creates larger built-in blank workbook with row labels');
     console.log('ok 2 - browser collapses sheet and AI side panels');
     console.log('ok 3 - browser upload renders editable grid');
     console.log('ok 4 - browser cell editing updates visible value');
     console.log('ok 5 - browser multi-cell paste fills the right range');
     console.log('ok 6 - browser arrow and enter keyboard movement changes active cell');
-    console.log('ok 7 - browser keyboard movement scrolls hidden columns into view');
+    console.log('ok 7 - browser keyboard movement scrolls hidden rows and columns into view');
     console.log('ok 8 - browser shortcut-style replacement works inside a cell input');
     console.log('ok 9 - browser clean action enables export after edits');
     console.log('');

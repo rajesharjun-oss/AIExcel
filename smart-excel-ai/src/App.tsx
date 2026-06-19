@@ -51,10 +51,25 @@ const actionLabels: Record<ActionKey, string> = {
   summary: 'Generate Summary'
 };
 
+const BLANK_WORKBOOK_COLUMNS = 52;
+const BLANK_WORKBOOK_ROWS = 500;
+const MAX_RENDERED_ROWS = 500;
+
+const excelColumnName = (index: number): string => {
+  let value = index + 1;
+  let label = '';
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+};
+
 const createBlankWorkbook = (): WorkbookModel => {
-  const columnCount = 26;
-  const rowCount = 100;
-  const headers = Array.from({ length: columnCount }, (_, index) => `Column ${index + 1}`);
+  const columnCount = BLANK_WORKBOOK_COLUMNS;
+  const rowCount = BLANK_WORKBOOK_ROWS;
+  const headers = Array.from({ length: columnCount }, (_, index) => excelColumnName(index));
   return {
     fileName: 'Untitled workbook',
     importedAt: new Date().toISOString(),
@@ -459,7 +474,7 @@ function SheetPreview({
   onEditCell: (sheetName: string, rowIndex: number, columnIndex: number, value: string) => void;
   onPasteCells: (sheetName: string, rowIndex: number, columnIndex: number, text: string) => void;
 }) {
-  const rows = sheet.rows.slice(sheet.dataStartIndex, sheet.dataStartIndex + 75);
+  const rows = sheet.rows.slice(sheet.dataStartIndex, sheet.dataStartIndex + MAX_RENDERED_ROWS);
   const headers = sheet.headers.slice(0, Math.max(1, sheet.columnCount));
   const focusCell = (rowIndex: number, columnIndex: number) => {
     const selector = `[data-cell="${sheet.name}-${rowIndex}-${columnIndex}"]`;
@@ -532,11 +547,11 @@ function SheetPreview({
           {rows.length ? (
             rows.map((row, rowIndex) => (
               <tr key={`${sheet.name}-${rowIndex}`}>
-                <td className="row-number">{sheet.dataStartIndex + rowIndex + 1}</td>
+                <td className="row-number">{rowIndex + 1}</td>
                 {headers.map((_, columnIndex) => (
                   <td key={`${sheet.name}-${rowIndex}-${columnIndex}`}>
                     <input
-                      aria-label={`${sheet.name} row ${sheet.dataStartIndex + rowIndex + 1} column ${columnIndex + 1}`}
+                      aria-label={`${sheet.name} row ${rowIndex + 1} column ${columnIndex + 1}`}
                       className="grid-cell-input"
                       data-cell={`${sheet.name}-${sheet.dataStartIndex + rowIndex}-${columnIndex}`}
                       value={cellToText(row[columnIndex])}
