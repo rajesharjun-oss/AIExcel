@@ -147,6 +147,12 @@ const connectPage = async (): Promise<CdpPage> => {
   await page.send('Runtime.enable');
   await page.send('Page.enable');
   await page.send('DOM.enable');
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    width: 1600,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false
+  });
   return page;
 };
 
@@ -176,6 +182,53 @@ const run = async () => {
       });
     });
 
+    await page.evaluate(async () => {
+      const button = Array.from(document.querySelectorAll('button')).find((item) => item.textContent?.includes('New Workbook')) as HTMLButtonElement | undefined;
+      if (!button) throw new Error('New Workbook button not found');
+      button.click();
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const tick = () => {
+          if (document.querySelector('[data-cell="Sheet1-1-0"]')) {
+            resolve();
+          } else if (Date.now() - started > 10_000) {
+            reject(new Error('blank workbook grid did not render'));
+          } else {
+            window.setTimeout(tick, 100);
+          }
+        };
+        tick();
+      });
+    });
+    const blankWorkbook = await page.evaluate(() => ({
+      title: document.querySelector('.sheet-summary h2')?.textContent,
+      columns: document.querySelectorAll('thead th').length - 1,
+      firstBlank: (document.querySelector('[data-cell="Sheet1-1-0"]') as HTMLInputElement | null)?.value
+    }));
+    assert.equal(blankWorkbook.title, 'Sheet1');
+    assert.equal(blankWorkbook.columns, 26);
+    assert.equal(blankWorkbook.firstBlank, '');
+
+    const collapsed = await page.evaluate(async () => {
+      const left = document.querySelector<HTMLButtonElement>('button[title="Hide sheets"]');
+      const right = document.querySelector<HTMLButtonElement>('button[title="Hide AI panel"]');
+      if (!left || !right) throw new Error('collapse buttons not found');
+      left.click();
+      right.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
+      const grid = document.querySelector('.workspace-grid');
+      return {
+        sheetsCollapsed: grid?.classList.contains('sheets-collapsed'),
+        assistantCollapsed: grid?.classList.contains('assistant-collapsed'),
+        sheetRailWidth: Math.round(document.querySelector('.sheet-rail')?.getBoundingClientRect().width ?? 0),
+        assistantWidth: Math.round(document.querySelector('.assistant-pane')?.getBoundingClientRect().width ?? 0)
+      };
+    });
+    assert.equal(collapsed.sheetsCollapsed, true);
+    assert.equal(collapsed.assistantCollapsed, true);
+    assert.ok(collapsed.sheetRailWidth <= 60, `sheet rail width was ${collapsed.sheetRailWidth}`);
+    assert.ok(collapsed.assistantWidth <= 60, `assistant width was ${collapsed.assistantWidth}`);
+
     const csv = await readFile(fixturePath('sample_dirty_data.csv'), 'utf8');
     await page.evaluate(async (csvText: string) => {
       const input = document.querySelector<HTMLInputElement>('input[type="file"]');
@@ -188,7 +241,8 @@ const run = async () => {
       await new Promise<void>((resolve, reject) => {
         const started = Date.now();
         const tick = () => {
-          if (document.querySelector('[data-cell="Sheet1-1-1"]')) {
+          const uploadedCell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-1-1"]');
+          if (uploadedCell?.value === '  FIRS payment  ') {
             resolve();
           } else if (Date.now() - started > 10_000) {
             reject(new Error('grid did not render after upload'));
@@ -280,15 +334,17 @@ const run = async () => {
     });
     assert.equal(cleanButtonEnabled, true);
 
-    console.log('ok 1 - browser upload renders editable grid');
-    console.log('ok 2 - browser cell editing updates visible value');
-    console.log('ok 3 - browser multi-cell paste fills the right range');
-    console.log('ok 4 - browser arrow and enter keyboard movement changes active cell');
-    console.log('ok 5 - browser shortcut-style replacement works inside a cell input');
-    console.log('ok 6 - browser clean action enables export after edits');
+    console.log('ok 1 - browser creates built-in blank workbook');
+    console.log('ok 2 - browser collapses sheet and AI side panels');
+    console.log('ok 3 - browser upload renders editable grid');
+    console.log('ok 4 - browser cell editing updates visible value');
+    console.log('ok 5 - browser multi-cell paste fills the right range');
+    console.log('ok 6 - browser arrow and enter keyboard movement changes active cell');
+    console.log('ok 7 - browser shortcut-style replacement works inside a cell input');
+    console.log('ok 8 - browser clean action enables export after edits');
     console.log('');
-    console.log('tests 6');
-    console.log('pass 6');
+    console.log('tests 8');
+    console.log('pass 8');
     console.log('fail 0');
   } finally {
     killTree(chrome);
@@ -299,7 +355,7 @@ const run = async () => {
 run().catch((error) => {
   console.error(error);
   console.log('');
-  console.log('tests 6');
+  console.log('tests 8');
   console.log('pass 0');
   console.log('fail 1');
   process.exitCode = 1;

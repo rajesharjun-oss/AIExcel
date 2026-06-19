@@ -4,8 +4,13 @@ import {
   CheckCircle2,
   Database,
   Download,
+  FilePlus2,
   FileSpreadsheet,
   Layers3,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   MessageSquareText,
   RefreshCw,
   Search,
@@ -46,6 +51,27 @@ const actionLabels: Record<ActionKey, string> = {
   summary: 'Generate Summary'
 };
 
+const createBlankWorkbook = (): WorkbookModel => {
+  const columnCount = 26;
+  const rowCount = 100;
+  const headers = Array.from({ length: columnCount }, (_, index) => `Column ${index + 1}`);
+  return {
+    fileName: 'Untitled workbook',
+    importedAt: new Date().toISOString(),
+    sheets: [
+      {
+        name: 'Sheet1',
+        rows: [headers, ...Array.from({ length: rowCount }, () => Array.from({ length: columnCount }, () => null))],
+        headers,
+        headerRowIndex: 0,
+        dataStartIndex: 1,
+        rowCount,
+        columnCount
+      }
+    ]
+  };
+};
+
 function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [workbook, setWorkbook] = useState<WorkbookModel | null>(null);
@@ -59,6 +85,8 @@ function App() {
   const [activeAction, setActiveAction] = useState<ActionKey | null>(null);
   const [cleanReady, setCleanReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sheetsCollapsed, setSheetsCollapsed] = useState(false);
+  const [assistantCollapsed, setAssistantCollapsed] = useState(false);
 
   const profile = useMemo(() => (workbook ? buildWorkbookProfile(workbook) : null), [workbook]);
   const activeSheet = useMemo(
@@ -100,6 +128,23 @@ function App() {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
     if (file) void handleFile(file);
+  };
+
+  const openBlankWorkbook = () => {
+    const blank = createBlankWorkbook();
+    const nextProfile = buildWorkbookProfile(blank);
+    setWorkbook(blank);
+    setActiveSheetName(blank.sheets[0].name);
+    setFindings(makeSummaryFindings(blank, nextProfile));
+    setCleanReady(false);
+    setError(null);
+    setMessages([
+      {
+        id: 'blank-workbook',
+        role: 'assistant',
+        text: 'Blank workbook created. You can type, paste, upload a file, run checks, or ask AI about the sheet.'
+      }
+    ]);
   };
 
   const editCell = (sheetName: string, rowIndex: number, columnIndex: number, value: string) => {
@@ -191,6 +236,10 @@ function App() {
         <div className="topbar-actions">
           {profile ? <Stat label="Sheets" value={profile.sheetCount.toLocaleString()} /> : null}
           {profile ? <Stat label="Rows" value={profile.totalRows.toLocaleString()} /> : null}
+          <button className="button" type="button" onClick={openBlankWorkbook}>
+            <FilePlus2 size={17} />
+            New Workbook
+          </button>
           <button className="button primary" type="button" onClick={() => fileInputRef.current?.click()}>
             <UploadCloud size={17} />
             Upload
@@ -243,12 +292,19 @@ function App() {
         </button>
       </section>
 
-      <section className="workspace-grid">
-        <aside className="sheet-rail">
-          <div className="rail-heading">
-            <Table2 size={17} />
-            Sheets
+      <section className={`workspace-grid ${sheetsCollapsed ? 'sheets-collapsed' : ''} ${assistantCollapsed ? 'assistant-collapsed' : ''}`}>
+        <aside className={`sheet-rail ${sheetsCollapsed ? 'collapsed' : ''}`}>
+          <div className="rail-heading rail-heading-row">
+            <span>
+              <Table2 size={17} />
+              Sheets
+            </span>
+            <button className="icon-button" type="button" title={sheetsCollapsed ? 'Show sheets' : 'Hide sheets'} onClick={() => setSheetsCollapsed((value) => !value)}>
+              {sheetsCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
           </div>
+          {sheetsCollapsed ? null : (
+            <>
           {workbook ? (
             workbook.sheets.map((sheet) => (
               <button
@@ -264,6 +320,8 @@ function App() {
           ) : (
             <div className="muted-block">No workbook loaded</div>
           )}
+            </>
+          )}
         </aside>
 
         <section className="data-pane">
@@ -273,11 +331,11 @@ function App() {
               <SheetPreview sheet={activeSheet} onEditCell={editCell} onPasteCells={pasteIntoCell} />
             </>
           ) : (
-            <UploadPanel isParsing={isParsing} onDrop={handleDrop} onBrowse={() => fileInputRef.current?.click()} />
+            <UploadPanel isParsing={isParsing} onDrop={handleDrop} onBrowse={() => fileInputRef.current?.click()} onNewWorkbook={openBlankWorkbook} />
           )}
         </section>
 
-        <aside className="assistant-pane">
+        <aside className={`assistant-pane ${assistantCollapsed ? 'collapsed' : ''}`}>
           <div className="assistant-header">
             <div>
               <div className="rail-heading">
@@ -286,8 +344,12 @@ function App() {
               </div>
               <p>{workbook ? 'Workbook-aware tasks' : 'Upload a workbook to begin'}</p>
             </div>
-            <Sparkles size={18} />
+            <button className="icon-button" type="button" title={assistantCollapsed ? 'Show AI panel' : 'Hide AI panel'} onClick={() => setAssistantCollapsed((value) => !value)}>
+              {assistantCollapsed ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />}
+            </button>
           </div>
+          {assistantCollapsed ? null : (
+            <>
 
           <div className="messages">
             {messages.length ? (
@@ -325,6 +387,8 @@ function App() {
           </form>
 
           <FindingList findings={findings} />
+            </>
+          )}
         </aside>
       </section>
     </main>
@@ -340,7 +404,17 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function UploadPanel({ isParsing, onBrowse, onDrop }: { isParsing: boolean; onBrowse: () => void; onDrop: (event: React.DragEvent<HTMLDivElement>) => void }) {
+function UploadPanel({
+  isParsing,
+  onBrowse,
+  onDrop,
+  onNewWorkbook
+}: {
+  isParsing: boolean;
+  onBrowse: () => void;
+  onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
+  onNewWorkbook: () => void;
+}) {
   return (
     <div className="upload-panel" onDragOver={(event) => event.preventDefault()} onDrop={onDrop}>
       <div className="upload-icon">
@@ -348,10 +422,16 @@ function UploadPanel({ isParsing, onBrowse, onDrop }: { isParsing: boolean; onBr
       </div>
       <h2>{isParsing ? 'Indexing workbook' : 'Load an Excel workbook'}</h2>
       <p>.xlsx, .xls, .xlsm, and .csv files</p>
-      <button className="button primary" type="button" onClick={onBrowse} disabled={isParsing}>
-        <UploadCloud size={17} />
-        Choose File
-      </button>
+      <div className="upload-actions">
+        <button className="button primary" type="button" onClick={onNewWorkbook} disabled={isParsing}>
+          <FilePlus2 size={17} />
+          New Workbook
+        </button>
+        <button className="button" type="button" onClick={onBrowse} disabled={isParsing}>
+          <UploadCloud size={17} />
+          Upload Excel
+        </button>
+      </div>
     </div>
   );
 }
