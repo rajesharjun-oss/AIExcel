@@ -203,7 +203,8 @@ const run = async () => {
     const blankWorkbook = await page.evaluate(() => ({
       title: document.querySelector('.sheet-summary h2')?.textContent,
       columns: document.querySelectorAll('thead th').length - 1,
-      rows: document.querySelectorAll('tbody tr').length,
+      renderedRows: document.querySelectorAll('tbody tr:not(.virtual-spacer)').length,
+      summaryText: document.querySelector('.sheet-summary')?.textContent,
       firstHeader: document.querySelectorAll('thead th')[1]?.textContent,
       lastHeader: document.querySelectorAll('thead th')[52]?.textContent,
       rowNumbers: Array.from(document.querySelectorAll('tbody .row-number')).slice(0, 5).map((item) => item.textContent),
@@ -211,7 +212,8 @@ const run = async () => {
     }));
     assert.equal(blankWorkbook.title, 'Sheet1');
     assert.equal(blankWorkbook.columns, 52);
-    assert.equal(blankWorkbook.rows, 500);
+    assert.ok(blankWorkbook.summaryText?.includes('500'), `expected 500 row summary: ${blankWorkbook.summaryText}`);
+    assert.ok(blankWorkbook.renderedRows < 500, `expected virtualized rows, rendered ${blankWorkbook.renderedRows}`);
     assert.equal(blankWorkbook.firstHeader, 'A');
     assert.equal(blankWorkbook.lastHeader, 'AZ');
     assert.deepEqual(blankWorkbook.rowNumbers, ['1', '2', '3', '4', '5']);
@@ -284,6 +286,68 @@ const run = async () => {
     assert.ok(verticalScroll.scrollTop > 0, `expected vertical scroll: ${JSON.stringify(verticalScroll)}`);
     const verticalRowIndex = Number(verticalScroll.activeCell?.split('-')[1]);
     assert.ok(verticalRowIndex >= 90, `expected vertical navigation to move deep into the sheet: ${JSON.stringify(verticalScroll)}`);
+
+    const largeCsv = [
+      'ID,Description,Amount',
+      ...Array.from({ length: 750 }, (_, index) => `${index + 1},Large row ${index + 1},${(index + 1) * 10}`)
+    ].join('\n');
+    await page.evaluate(async (csvText: string) => {
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (!input) throw new Error('file input not found for large upload');
+      const file = new File([csvText], 'large_upload.csv', { type: 'text/csv' });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const tick = () => {
+          if (document.querySelector('[data-cell="Sheet1-1-1"]')) {
+            resolve();
+          } else if (Date.now() - started > 10_000) {
+            reject(new Error('large upload did not render'));
+          } else {
+            window.setTimeout(tick, 100);
+          }
+        };
+        tick();
+      });
+    }, largeCsv);
+    const largeUpload = await page.evaluate(async () => {
+      const wrapper = document.querySelector<HTMLElement>('.table-wrap');
+      if (!wrapper) throw new Error('large upload table wrapper not found');
+      wrapper.scrollTop = wrapper.scrollHeight;
+      wrapper.dispatchEvent(new Event('scroll'));
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const tick = () => {
+          if (document.querySelector('[data-cell="Sheet1-750-1"]')) {
+            resolve();
+          } else if (Date.now() - started > 10_000) {
+            reject(new Error('row 750 did not render after scrolling'));
+          } else {
+            window.setTimeout(tick, 100);
+          }
+        };
+        tick();
+      });
+      const rowNumber = Array.from(document.querySelectorAll('tbody .row-number')).find((item) => item.textContent === '750')?.textContent;
+      const cell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-750-1"]');
+      if (!cell) throw new Error('row 750 editable cell not found');
+      cell.focus();
+      cell.value = 'Edited row 750';
+      cell.dispatchEvent(new Event('input', { bubbles: true }));
+      return {
+        rowNumber,
+        value: cell.value,
+        renderedRows: document.querySelectorAll('tbody tr:not(.virtual-spacer)').length,
+        summaryText: document.querySelector('.sheet-summary')?.textContent
+      };
+    });
+    assert.equal(largeUpload.rowNumber, '750');
+    assert.equal(largeUpload.value, 'Edited row 750');
+    assert.ok(largeUpload.summaryText?.includes('750'), `expected 750 row summary: ${largeUpload.summaryText}`);
+    assert.ok(largeUpload.renderedRows < 750, `expected virtualized large upload rows: ${JSON.stringify(largeUpload)}`);
 
     const csv = await readFile(fixturePath('sample_dirty_data.csv'), 'utf8');
     await page.evaluate(async (csvText: string) => {
@@ -397,11 +461,12 @@ const run = async () => {
     console.log('ok 5 - browser multi-cell paste fills the right range');
     console.log('ok 6 - browser arrow and enter keyboard movement changes active cell');
     console.log('ok 7 - browser keyboard movement scrolls hidden rows and columns into view');
-    console.log('ok 8 - browser shortcut-style replacement works inside a cell input');
-    console.log('ok 9 - browser clean action enables export after edits');
+    console.log('ok 8 - browser virtual scrolling reaches and edits uploaded rows beyond 500');
+    console.log('ok 9 - browser shortcut-style replacement works inside a cell input');
+    console.log('ok 10 - browser clean action enables export after edits');
     console.log('');
-    console.log('tests 9');
-    console.log('pass 9');
+    console.log('tests 10');
+    console.log('pass 10');
     console.log('fail 0');
   } finally {
     killTree(chrome);
@@ -412,7 +477,7 @@ const run = async () => {
 run().catch((error) => {
   console.error(error);
   console.log('');
-  console.log('tests 9');
+  console.log('tests 10');
   console.log('pass 0');
   console.log('fail 1');
   process.exitCode = 1;

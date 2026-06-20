@@ -19,7 +19,7 @@ import {
   UploadCloud,
   Wand2
 } from 'lucide-react';
-import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { askWorkbookAi, userMessage } from './lib/assistant';
 import { pasteCells, updateCell } from './lib/grid-edit';
 import {
@@ -53,7 +53,8 @@ const actionLabels: Record<ActionKey, string> = {
 
 const BLANK_WORKBOOK_COLUMNS = 52;
 const BLANK_WORKBOOK_ROWS = 500;
-const MAX_RENDERED_ROWS = 500;
+const GRID_ROW_HEIGHT = 36;
+const GRID_ROW_BUFFER = 8;
 
 const excelColumnName = (index: number): string => {
   let value = index + 1;
@@ -474,12 +475,53 @@ function SheetPreview({
   onEditCell: (sheetName: string, rowIndex: number, columnIndex: number, value: string) => void;
   onPasteCells: (sheetName: string, rowIndex: number, columnIndex: number, text: string) => void;
 }) {
-  const rows = sheet.rows.slice(sheet.dataStartIndex, sheet.dataStartIndex + MAX_RENDERED_ROWS);
+  const tableWrapRef = useRef<HTMLDivElement | null>(null);
+  const [viewport, setViewport] = useState({ scrollTop: 0, clientHeight: 540 });
+  const [pendingFocus, setPendingFocus] = useState<{ rowIndex: number; columnIndex: number } | null>(null);
   const headers = sheet.headers.slice(0, Math.max(1, sheet.columnCount));
+  const dataRows = useMemo(() => sheet.rows.slice(sheet.dataStartIndex), [sheet.dataStartIndex, sheet.rows]);
+  const visibleCount = Math.max(20, Math.ceil(viewport.clientHeight / GRID_ROW_HEIGHT) + GRID_ROW_BUFFER * 2);
+  const startRowOffset = Math.max(0, Math.floor(viewport.scrollTop / GRID_ROW_HEIGHT) - GRID_ROW_BUFFER);
+  const endRowOffset = Math.min(dataRows.length, startRowOffset + visibleCount);
+  const rows = dataRows.slice(startRowOffset, endRowOffset);
+  const topSpacerHeight = startRowOffset * GRID_ROW_HEIGHT;
+  const bottomSpacerHeight = Math.max(0, (dataRows.length - endRowOffset) * GRID_ROW_HEIGHT);
+
+  useEffect(() => {
+    const wrapper = tableWrapRef.current;
+    if (!wrapper) return;
+    wrapper.scrollTop = 0;
+    wrapper.scrollLeft = 0;
+    setViewport({ scrollTop: wrapper.scrollTop, clientHeight: wrapper.clientHeight || 540 });
+  }, [sheet.name, sheet.rowCount, sheet.columnCount]);
+
+  useEffect(() => {
+    if (!pendingFocus) return;
+    const selector = `[data-cell="${sheet.name}-${pendingFocus.rowIndex}-${pendingFocus.columnIndex}"]`;
+    const next = document.querySelector<HTMLInputElement>(selector);
+    if (!next) return;
+    next.focus();
+    next.select();
+    setPendingFocus(null);
+  }, [pendingFocus, rows, sheet.name]);
+
+  const updateViewport = () => {
+    const wrapper = tableWrapRef.current;
+    if (!wrapper) return;
+    setViewport({ scrollTop: wrapper.scrollTop, clientHeight: wrapper.clientHeight || 540 });
+  };
+
   const focusCell = (rowIndex: number, columnIndex: number) => {
     const selector = `[data-cell="${sheet.name}-${rowIndex}-${columnIndex}"]`;
     const next = document.querySelector<HTMLInputElement>(selector);
-    const scroller = next?.closest<HTMLElement>('.table-wrap');
+    const scroller = tableWrapRef.current ?? next?.closest<HTMLElement>('.table-wrap');
+    const dataRowOffset = rowIndex - sheet.dataStartIndex;
+    if (!next && scroller && dataRowOffset >= 0) {
+      scroller.scrollTop = Math.max(0, dataRowOffset * GRID_ROW_HEIGHT - GRID_ROW_HEIGHT * 2);
+      setViewport({ scrollTop: scroller.scrollTop, clientHeight: scroller.clientHeight || viewport.clientHeight });
+      setPendingFocus({ rowIndex, columnIndex });
+      return;
+    }
     if (next && scroller) {
       const cellRect = next.getBoundingClientRect();
       const scrollerRect = scroller.getBoundingClientRect();
@@ -499,8 +541,10 @@ function SheetPreview({
   };
 
   const moveFocus = (rowIndex: number, columnIndex: number, rowDelta: number, columnDelta: number) => {
-    const nextRowIndex = Math.max(sheet.dataStartIndex, rowIndex + rowDelta);
-    const nextColumnIndex = Math.max(0, columnIndex + columnDelta);
+    const lastRowIndex = Math.max(sheet.dataStartIndex, sheet.rows.length - 1);
+    const lastColumnIndex = Math.max(0, headers.length - 1);
+    const nextRowIndex = Math.min(lastRowIndex, Math.max(sheet.dataStartIndex, rowIndex + rowDelta));
+    const nextColumnIndex = Math.min(lastColumnIndex, Math.max(0, columnIndex + columnDelta));
     window.requestAnimationFrame(() => focusCell(nextRowIndex, nextColumnIndex));
   };
 
@@ -533,7 +577,7 @@ function SheetPreview({
   };
 
   return (
-    <div className="table-wrap">
+    <div className="table-wrap" ref={tableWrapRef} onScroll={updateViewport}>
       <table>
         <thead>
           <tr>
@@ -544,30 +588,44 @@ function SheetPreview({
           </tr>
         </thead>
         <tbody>
-          {rows.length ? (
-            rows.map((row, rowIndex) => (
-              <tr key={`${sheet.name}-${rowIndex}`}>
-                <td className="row-number">{rowIndex + 1}</td>
+          {topSpacerHeight > 0 ? (
+            <tr className="virtual-spacer" aria-hidden="true">
+              <td colSpan={headers.length + 1} style={{ height: topSpacerHeight }} />
+            </tr>
+          ) : null}
+          {dataRows.length ? (
+            rows.map((row, rowIndex) => {
+              const dataRowOffset = startRowOffset + rowIndex;
+              const sheetRowIndex = sheet.dataStartIndex + dataRowOffset;
+              return (
+              <tr key={`${sheet.name}-${sheetRowIndex}`}>
+                <td className="row-number">{dataRowOffset + 1}</td>
                 {headers.map((_, columnIndex) => (
-                  <td key={`${sheet.name}-${rowIndex}-${columnIndex}`}>
+                  <td key={`${sheet.name}-${sheetRowIndex}-${columnIndex}`}>
                     <input
-                      aria-label={`${sheet.name} row ${rowIndex + 1} column ${columnIndex + 1}`}
+                      aria-label={`${sheet.name} row ${dataRowOffset + 1} column ${columnIndex + 1}`}
                       className="grid-cell-input"
-                      data-cell={`${sheet.name}-${sheet.dataStartIndex + rowIndex}-${columnIndex}`}
+                      data-cell={`${sheet.name}-${sheetRowIndex}-${columnIndex}`}
                       value={cellToText(row[columnIndex])}
-                      onChange={(event) => onEditCell(sheet.name, sheet.dataStartIndex + rowIndex, columnIndex, event.target.value)}
-                      onKeyDown={(event) => handleKeyDown(event, sheet.dataStartIndex + rowIndex, columnIndex)}
-                      onPaste={(event) => handlePaste(event, sheet.dataStartIndex + rowIndex, columnIndex)}
+                      onChange={(event) => onEditCell(sheet.name, sheetRowIndex, columnIndex, event.target.value)}
+                      onKeyDown={(event) => handleKeyDown(event, sheetRowIndex, columnIndex)}
+                      onPaste={(event) => handlePaste(event, sheetRowIndex, columnIndex)}
                     />
                   </td>
                 ))}
               </tr>
-            ))
+              );
+            })
           ) : (
             <tr>
               <td colSpan={headers.length + 1}>No data rows detected.</td>
             </tr>
           )}
+          {bottomSpacerHeight > 0 ? (
+            <tr className="virtual-spacer" aria-hidden="true">
+              <td colSpan={headers.length + 1} style={{ height: bottomSpacerHeight }} />
+            </tr>
+          ) : null}
         </tbody>
       </table>
     </div>

@@ -408,6 +408,16 @@ th {
   font-weight: 760;
 }
 
+tbody tr {
+  height: 36px;
+}
+
+.virtual-spacer,
+.virtual-spacer td {
+  border: 0;
+  padding: 0;
+}
+
 .row-number {
   position: sticky;
   left: 0;
