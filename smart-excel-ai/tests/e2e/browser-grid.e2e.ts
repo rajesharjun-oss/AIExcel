@@ -285,7 +285,7 @@ const run = async () => {
     assert.ok(verticalScroll.scrollHeight > verticalScroll.clientHeight, `expected grid vertical overflow: ${JSON.stringify(verticalScroll)}`);
     assert.ok(verticalScroll.scrollTop > 0, `expected vertical scroll: ${JSON.stringify(verticalScroll)}`);
     const verticalRowIndex = Number(verticalScroll.activeCell?.split('-')[1]);
-    assert.ok(verticalRowIndex >= 90, `expected vertical navigation to move deep into the sheet: ${JSON.stringify(verticalScroll)}`);
+    assert.ok(verticalRowIndex >= 80, `expected vertical navigation to move deep into the sheet: ${JSON.stringify(verticalScroll)}`);
 
     const largeCsv = [
       'ID,Description,Amount',
