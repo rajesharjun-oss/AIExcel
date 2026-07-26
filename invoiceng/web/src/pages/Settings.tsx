@@ -103,6 +103,25 @@ export function SettingsPage() {
           </button>
         </div>
       </form>
+
+      <h2>Your data</h2>
+      <div className="card">
+        <p style={{ marginTop: 0 }}>
+          Everything you record here is yours. Download it any time — it opens in Excel or Google
+          Sheets.
+        </p>
+        <div className="actions">
+          <a className="btn btn-secondary" href="/api/export/invoices.csv" download>
+            Invoices (CSV)
+          </a>
+          <a className="btn btn-secondary" href="/api/export/customers.csv" download>
+            Customers (CSV)
+          </a>
+          <a className="btn btn-secondary" href="/api/export/payments.csv" download>
+            Payments (CSV)
+          </a>
+        </div>
+      </div>
     </>
   );
 }

@@ -1,0 +1,43 @@
+name: InvoiceNG CI
+
+on:
+  push:
+    paths:
+      - "invoiceng/**"
+      - ".github/workflows/invoiceng-ci.yml"
+  pull_request:
+    paths:
+      - "invoiceng/**"
+      - ".github/workflows/invoiceng-ci.yml"
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: invoiceng/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: invoiceng/server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: invoiceng/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: invoiceng/web/package-lock.json
+      - run: npm ci
+      - run: npm run build

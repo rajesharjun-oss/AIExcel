@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { businesses, invoiceItems, PAYMENT_METHODS } from "../db/schema.js";
+import { businesses, customers, invoiceItems, PAYMENT_METHODS } from "../db/schema.js";
+import { renderInvoicePdf } from "../services/pdf.js";
 import { MAX_AMOUNT_KOBO } from "../domain/money.js";
 import {
   createInvoice,
@@ -92,6 +93,47 @@ export async function invoiceRoutes(app: FastifyInstance): Promise<void> {
     const { id } = IdParamSchema.parse(req.params);
     voidInvoice(db, user.businessId, id, now());
     return reply.send({ ok: true });
+  });
+
+  app.get("/:id/pdf", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
+    const user = req.currentUser!;
+    const { id } = IdParamSchema.parse(req.params);
+    const invoice = getInvoiceForBusiness(db, user.businessId, id);
+    if (!invoice) return reply.code(404).send({ error: "not found" });
+    const business = db
+      .select({ name: businesses.name, tin: businesses.tin })
+      .from(businesses)
+      .where(eq(businesses.id, user.businessId))
+      .get();
+    const customer = db
+      .select({ name: customers.name })
+      .from(customers)
+      .where(eq(customers.id, invoice.customerId))
+      .get();
+    const items = db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)).all();
+    const pdf = await renderInvoicePdf({
+      businessName: business?.name ?? "",
+      businessTin: business?.tin ?? null,
+      customerName: customer?.name ?? "",
+      number: invoice.number,
+      status: invoice.status,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      items,
+      subtotalKobo: invoice.subtotalKobo,
+      vatKobo: invoice.vatKobo,
+      totalKobo: invoice.totalKobo,
+      paidKobo: invoice.paidKobo,
+      notes: invoice.notes,
+      payUrl:
+        invoice.status === "sent" || invoice.status === "part_paid"
+          ? `${app.deps.config.APP_BASE_URL}/i/${invoice.shareToken}`
+          : null,
+    });
+    return reply
+      .header("content-type", "application/pdf")
+      .header("content-disposition", `attachment; filename="${invoice.number}.pdf"`)
+      .send(pdf);
   });
 
   /** Manual payment (cash / bank transfer) recorded by the owner. */

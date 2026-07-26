@@ -20,6 +20,7 @@ import { invoiceRoutes } from "./routes/invoices.js";
 import { publicRoutes } from "./routes/public.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { reminderRoutes } from "./routes/reminders.js";
+import { exportRoutes } from "./routes/exports.js";
 
 export interface AppDeps {
   readonly config: AppConfig;
@@ -148,6 +149,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     await scope.register(customerRoutes, { prefix: "/customers" });
     await scope.register(invoiceRoutes, { prefix: "/invoices" });
     await scope.register(reminderRoutes, { prefix: "/reminders" });
+    await scope.register(exportRoutes, { prefix: "/export" });
   }, { prefix: "/api" });
 
   return app;

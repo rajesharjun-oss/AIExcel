@@ -134,6 +134,12 @@ export function PublicInvoicePage() {
         </div>
       </div>
 
+      <div className="actions">
+        <a className="btn btn-secondary" href={`/api/pub/invoices/${token}/pdf`} download>
+          Download PDF
+        </a>
+      </div>
+
       {invoice.status === "paid" ? (
         <div className="alert alert-ok" role="status">
           This invoice is fully paid. Thank you!

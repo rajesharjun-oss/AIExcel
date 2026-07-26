@@ -177,6 +177,9 @@ export function InvoiceDetailPage() {
             >
               Share on WhatsApp
             </a>
+            <a className="btn btn-secondary" href={`/api/invoices/${invoice.id}/pdf`} download>
+              Download PDF
+            </a>
           </div>
         </div>
       )}
