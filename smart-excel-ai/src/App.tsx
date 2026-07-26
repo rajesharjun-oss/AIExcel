@@ -8,6 +8,7 @@ import {
   Download,
   FilePlus2,
   FileSpreadsheet,
+  Languages,
   Layers3,
   LineChart,
   PanelLeftClose,
@@ -20,6 +21,7 @@ import {
   Search,
   Table2,
   TrendingUp,
+  Undo2,
   UploadCloud,
   Wand2
 } from 'lucide-react';
@@ -27,6 +29,13 @@ import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useMe
 import { askWorkbookAi, userMessage } from './lib/assistant';
 import { analyzeWorkbookFinances, financialFindings, formatMoney } from './lib/finance';
 import { pasteCells, updateCell } from './lib/grid-edit';
+import {
+  createTranslationFinding,
+  languageLabel,
+  supportedLanguages,
+  translateSheet,
+  type LanguageCode
+} from './lib/translate';
 import {
   buildWorkbookProfile,
   cellToText,
@@ -111,6 +120,9 @@ function App() {
   const [assistantCollapsed, setAssistantCollapsed] = useState(false);
   const [dataView, setDataView] = useState<DataView>('grid');
   const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState<LanguageCode>('es');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationBackup, setTranslationBackup] = useState<WorkbookModel | null>(null);
 
   const profile = useMemo(() => (workbook ? buildWorkbookProfile(workbook) : null), [workbook]);
   const activeSheet = useMemo(
@@ -127,6 +139,7 @@ function App() {
     try {
       const parsed = await parseWorkbook(file);
       const nextProfile = buildWorkbookProfile(parsed);
+      setTranslationBackup(null);
       setWorkbook(parsed);
       setActiveSheetName(parsed.sheets[0]?.name ?? '');
       setFindings(makeSummaryFindings(parsed, nextProfile));
@@ -159,6 +172,7 @@ function App() {
   const openBlankWorkbook = () => {
     const blank = createBlankWorkbook();
     const nextProfile = buildWorkbookProfile(blank);
+    setTranslationBackup(null);
     setWorkbook(blank);
     setActiveSheetName(blank.sheets[0].name);
     setFindings(makeSummaryFindings(blank, nextProfile));
@@ -177,11 +191,14 @@ function App() {
 
   const editCell = (sheetName: string, rowIndex: number, columnIndex: number, value: string) => {
     setCleanReady(false);
+    // Manual edits invalidate the translation snapshot so Revert can never discard them.
+    setTranslationBackup(null);
     setWorkbook((current) => (current ? updateCell(current, sheetName, rowIndex, columnIndex, value) : current));
   };
 
   const pasteIntoCell = (sheetName: string, rowIndex: number, columnIndex: number, text: string) => {
     setCleanReady(false);
+    setTranslationBackup(null);
     setWorkbook((current) => (current ? pasteCells(current, sheetName, rowIndex, columnIndex, text) : current));
   };
 
@@ -259,6 +276,50 @@ function App() {
     }
   };
 
+  const runTranslation = async () => {
+    if (!workbook || !activeSheet || isTranslating) return;
+    setIsTranslating(true);
+    const backup = translationBackup ?? workbook;
+    try {
+      const result = await translateSheet(workbook, activeSheet.name, targetLanguage);
+      const finding = createTranslationFinding(result);
+      if (result.translatedCells) {
+        setTranslationBackup(backup);
+        setWorkbook(result.workbook);
+        setCleanReady(false);
+      }
+      setFindings([finding]);
+      setMessages((current) => [
+        ...current,
+        {
+          id: `translate-${Date.now()}`,
+          role: 'assistant',
+          text: result.translatedCells
+            ? `Translated ${result.translatedCells} cell${result.translatedCells === 1 ? '' : 's'} on ${result.sheetName} to ${languageLabel(result.targetLanguage)}${result.usedRemoteAi ? ' with the AI translation service' : ' with the built-in dictionary'}. Numbers, dates, and IDs were preserved.`
+            : `No translatable text was found on ${result.sheetName} for ${languageLabel(result.targetLanguage)}.`,
+          findings: [finding]
+        }
+      ]);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const revertTranslation = () => {
+    if (!translationBackup) return;
+    setWorkbook(translationBackup);
+    setTranslationBackup(null);
+    setCleanReady(false);
+    setMessages((current) => [
+      ...current,
+      {
+        id: `translate-revert-${Date.now()}`,
+        role: 'assistant',
+        text: 'Translation reverted. The original workbook text has been restored.'
+      }
+    ]);
+  };
+
   const askAi = async (event: FormEvent) => {
     event.preventDefault();
     if (!workbook || !question.trim()) return;
@@ -332,6 +393,31 @@ function App() {
           <LineChart size={17} />
           Financial Insights
         </button>
+        <div className="translate-box">
+          <Languages size={17} />
+          <select
+            aria-label="Target language"
+            value={targetLanguage}
+            onChange={(event) => setTargetLanguage(event.target.value as LanguageCode)}
+            disabled={!workbook || isTranslating}
+          >
+            {supportedLanguages.map((language) => (
+              <option key={language.code} value={language.code}>
+                {language.label}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void runTranslation()} disabled={!workbook || isTranslating}>
+            {isTranslating ? <RefreshCw className="spin" size={15} /> : null}
+            Translate
+          </button>
+          {translationBackup ? (
+            <button type="button" title="Revert translation" onClick={revertTranslation} disabled={isTranslating}>
+              <Undo2 size={15} />
+              Revert
+            </button>
+          ) : null}
+        </div>
         <div className="search-box">
           <Search size={17} />
           <input
