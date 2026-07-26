@@ -28,6 +28,7 @@ import {
   languageLabel,
   supportedLanguages,
   translateSheet,
+  translateWorkbook,
   type LanguageCode
 } from './lib/translate';
 import {
@@ -35,6 +36,7 @@ import {
   cellToText,
   createCleaningFindings,
   downloadCleanWorkbook,
+  downloadWorkbookCopy,
   findDuplicates,
   findInconsistencies,
   makeSummaryFindings,
@@ -112,6 +114,7 @@ function App() {
   const [sheetsCollapsed, setSheetsCollapsed] = useState(false);
   const [assistantCollapsed, setAssistantCollapsed] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState<LanguageCode>('es');
+  const [translateScope, setTranslateScope] = useState<'sheet' | 'workbook'>('sheet');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationBackup, setTranslationBackup] = useState<WorkbookModel | null>(null);
 
@@ -239,7 +242,10 @@ function App() {
     setIsTranslating(true);
     const backup = translationBackup ?? workbook;
     try {
-      const result = await translateSheet(workbook, activeSheet.name, targetLanguage);
+      const result =
+        translateScope === 'workbook'
+          ? await translateWorkbook(workbook, targetLanguage)
+          : await translateSheet(workbook, activeSheet.name, targetLanguage);
       const finding = createTranslationFinding(result);
       if (result.translatedCells) {
         setTranslationBackup(backup);
@@ -361,6 +367,15 @@ function App() {
               </option>
             ))}
           </select>
+          <select
+            aria-label="Translation scope"
+            value={translateScope}
+            onChange={(event) => setTranslateScope(event.target.value as 'sheet' | 'workbook')}
+            disabled={!workbook || isTranslating}
+          >
+            <option value="sheet">Active sheet</option>
+            <option value="workbook">All sheets</option>
+          </select>
           <button type="button" onClick={() => void runTranslation()} disabled={!workbook || isTranslating}>
             {isTranslating ? <RefreshCw className="spin" size={15} /> : null}
             Translate
@@ -390,6 +405,16 @@ function App() {
         <button className="button accent" type="button" disabled={!workbook || !cleanReady} onClick={() => workbook && downloadCleanWorkbook(workbook)}>
           <Download size={17} />
           Download Cleaned
+        </button>
+        <button
+          className="button"
+          type="button"
+          title="Download the workbook exactly as shown, including edits and translations"
+          disabled={!workbook}
+          onClick={() => workbook && downloadWorkbookCopy(workbook)}
+        >
+          <Download size={17} />
+          Download Copy
         </button>
       </section>
 
