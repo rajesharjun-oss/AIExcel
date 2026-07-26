@@ -6,6 +6,7 @@ import {
   Download,
   FilePlus2,
   FileSpreadsheet,
+  Languages,
   Layers3,
   PanelLeftClose,
   PanelLeftOpen,
@@ -14,14 +15,21 @@ import {
   MessageSquareText,
   RefreshCw,
   Search,
-  Sparkles,
   Table2,
+  Undo2,
   UploadCloud,
   Wand2
 } from 'lucide-react';
 import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { askWorkbookAi, userMessage } from './lib/assistant';
 import { pasteCells, updateCell } from './lib/grid-edit';
+import {
+  createTranslationFinding,
+  languageLabel,
+  supportedLanguages,
+  translateSheet,
+  type LanguageCode
+} from './lib/translate';
 import {
   buildWorkbookProfile,
   cellToText,
@@ -103,6 +111,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [sheetsCollapsed, setSheetsCollapsed] = useState(false);
   const [assistantCollapsed, setAssistantCollapsed] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState<LanguageCode>('es');
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationBackup, setTranslationBackup] = useState<WorkbookModel | null>(null);
 
   const profile = useMemo(() => (workbook ? buildWorkbookProfile(workbook) : null), [workbook]);
   const activeSheet = useMemo(
@@ -117,6 +128,7 @@ function App() {
     try {
       const parsed = await parseWorkbook(file);
       const nextProfile = buildWorkbookProfile(parsed);
+      setTranslationBackup(null);
       setWorkbook(parsed);
       setActiveSheetName(parsed.sheets[0]?.name ?? '');
       setFindings(makeSummaryFindings(parsed, nextProfile));
@@ -149,6 +161,7 @@ function App() {
   const openBlankWorkbook = () => {
     const blank = createBlankWorkbook();
     const nextProfile = buildWorkbookProfile(blank);
+    setTranslationBackup(null);
     setWorkbook(blank);
     setActiveSheetName(blank.sheets[0].name);
     setFindings(makeSummaryFindings(blank, nextProfile));
@@ -214,6 +227,50 @@ function App() {
           ? `Found ${results.length} matching row${results.length === 1 ? '' : 's'} across the workbook.`
           : 'No matching rows found across the workbook.',
         findings: results
+      }
+    ]);
+  };
+
+  const runTranslation = async () => {
+    if (!workbook || !activeSheet || isTranslating) return;
+    setIsTranslating(true);
+    const backup = translationBackup ?? workbook;
+    try {
+      const result = await translateSheet(workbook, activeSheet.name, targetLanguage);
+      const finding = createTranslationFinding(result);
+      if (result.translatedCells) {
+        setTranslationBackup(backup);
+        setWorkbook(result.workbook);
+        setCleanReady(false);
+      }
+      setFindings([finding]);
+      setMessages((current) => [
+        ...current,
+        {
+          id: `translate-${Date.now()}`,
+          role: 'assistant',
+          text: result.translatedCells
+            ? `Translated ${result.translatedCells} cell${result.translatedCells === 1 ? '' : 's'} on ${result.sheetName} to ${languageLabel(result.targetLanguage)}${result.usedRemoteAi ? ' with the AI translation service' : ' with the built-in dictionary'}. Numbers, dates, and IDs were preserved.`
+            : `No translatable text was found on ${result.sheetName} for ${languageLabel(result.targetLanguage)}.`,
+          findings: [finding]
+        }
+      ]);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const revertTranslation = () => {
+    if (!translationBackup) return;
+    setWorkbook(translationBackup);
+    setTranslationBackup(null);
+    setCleanReady(false);
+    setMessages((current) => [
+      ...current,
+      {
+        id: `translate-revert-${Date.now()}`,
+        role: 'assistant',
+        text: 'Translation reverted. The original workbook text has been restored.'
       }
     ]);
   };
@@ -287,6 +344,31 @@ function App() {
           {activeAction === 'summary' ? <RefreshCw className="spin" size={17} /> : <Database size={17} />}
           Summary
         </button>
+        <div className="translate-box">
+          <Languages size={17} />
+          <select
+            aria-label="Target language"
+            value={targetLanguage}
+            onChange={(event) => setTargetLanguage(event.target.value as LanguageCode)}
+            disabled={!workbook || isTranslating}
+          >
+            {supportedLanguages.map((language) => (
+              <option key={language.code} value={language.code}>
+                {language.label}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void runTranslation()} disabled={!workbook || isTranslating}>
+            {isTranslating ? <RefreshCw className="spin" size={15} /> : null}
+            Translate
+          </button>
+          {translationBackup ? (
+            <button type="button" title="Revert translation" onClick={revertTranslation} disabled={isTranslating}>
+              <Undo2 size={15} />
+              Revert
+            </button>
+          ) : null}
+        </div>
         <div className="search-box">
           <Search size={17} />
           <input

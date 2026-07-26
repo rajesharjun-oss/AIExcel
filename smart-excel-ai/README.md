@@ -11,8 +11,9 @@ A fresh React/TypeScript MVP for an AI-assisted Excel workbook app.
 - Finds duplicate rows within and across sheets.
 - Finds inconsistencies such as duplicate headers, sparse rows, missing values, and mixed column types.
 - Creates basic cleaning suggestions and downloads a cleaned workbook.
+- Translates the active sheet live into English, Spanish, French, German, or Portuguese with one click, preserving numbers, dates, amounts, and IDs, with full revert support.
 - Includes an Ask AI panel that can answer workbook questions using local workbook tools.
-- Includes a server-side `/api/ai` proxy hook for a real AI provider.
+- Includes server-side `/api/ai` and `/api/translate` proxy hooks for a real AI provider; translation falls back to a built-in phrase dictionary offline.
 
 ## Run
 
@@ -68,7 +69,8 @@ Test files are in `tests/`:
 - `test_cleaning.test.ts`: duplicates, trimming, date normalization, invalid numbers, blank required fields, outlier amounts, and preservation checks.
 - `test_rules.test.ts`: rule categorization, unmatched rows, invalid amount flags, and total preservation.
 - `test_ai_chat.test.ts`: safe local assistant answers using current workbook data without mutating the workbook.
-- `e2e/browser-grid.e2e.ts`: starts Vite and headless Chrome to verify upload, editable cells, multi-cell paste, keyboard movement, shortcut-style replacement, and export readiness in the browser.
+- `test_translation.test.ts`: translatable-cell detection, dictionary translation with casing, language detection, workbook non-mutation, and revert support.
+- `e2e/browser-grid.e2e.ts`: starts Vite and headless Chrome to verify upload, editable cells, multi-cell paste, keyboard movement, shortcut-style replacement, live translation with revert, and export readiness in the browser.
 
 Add new reusable samples to `tests/fixtures/` and keep client-specific files out of source control.
 

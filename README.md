@@ -3,8 +3,17 @@
 AIExcel is a smart spreadsheet assistant project with two complementary paths:
 
 - `addin/`, `backend/`, and `shared/`: an existing Office Add-in architecture for embedding AI directly inside Excel.
-- `smart-excel-ai/`: a browser-based MVP for uploading Excel/CSV files, indexing every sheet, asking workbook-aware questions, finding duplicates, finding inconsistencies, cleaning data, and downloading cleaned workbooks.
+- `smart-excel-ai/`: a browser-based MVP for uploading Excel/CSV files, indexing every sheet, asking workbook-aware questions, finding duplicates, finding inconsistencies, cleaning data, translating sheets live, and downloading cleaned workbooks.
   Uploaded sheets open in an editable grid with direct cell entry, keyboard movement, and multi-cell paste support.
+
+## Live Translation
+
+The active sheet can be translated in place from the toolbar:
+
+- Pick a target language (English, Spanish, French, German, Portuguese) and press **Translate**.
+- Text cells and headers are translated; numbers, dates, currency amounts, emails, and identifiers are always preserved.
+- Translation is non-destructive: **Revert** restores the original text at any time.
+- With the backend running and an API key configured, translation uses the `/v1/translate` AI route; otherwise a built-in phrase dictionary keeps the feature working fully offline.
 
 ## Browser MVP
 
@@ -75,6 +84,7 @@ The suite lives under `smart-excel-ai/tests/`:
 - `test_cleaning.test.ts` checks duplicate detection, whitespace/date/number cleaning, blank required fields, invalid numbers, and outlier amounts.
 - `test_rules.test.ts` checks rule-based categorization, review flags, and total preservation.
 - `test_ai_chat.test.ts` checks the local Ask AI fallback uses current workbook findings and does not mutate data.
-- `e2e/browser-grid.e2e.ts` starts Vite and headless Chrome to verify upload, real cell editing, multi-cell paste, keyboard movement, shortcut-style replacement, and export readiness in the browser.
+- `test_translation.test.ts` checks translatable-cell detection, dictionary translation, language detection, non-mutation, and revert support.
+- `e2e/browser-grid.e2e.ts` starts Vite and headless Chrome to verify upload, real cell editing, multi-cell paste, keyboard movement, shortcut-style replacement, live translation with revert, and export readiness in the browser.
 
 To add a new case, place a generic sample file in `smart-excel-ai/tests/fixtures/`, add expected counts or rows in `smart-excel-ai/tests/expected/` when useful, then add a focused assertion to the matching test file. Keep client-specific files out of the suite.
