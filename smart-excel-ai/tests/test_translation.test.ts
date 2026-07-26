@@ -6,10 +6,12 @@ import {
   languageLabel,
   supportedLanguages,
   translatePhraseLocally,
-  translateSheet
+  translateSheet,
+  translateWorkbook
 } from '../src/lib/translate';
+import { buildWorkbookCopy, parseWorkbook, workbookCopyToArrayBuffer } from '../src/lib/workbook';
 import { test } from './helpers/test-runner';
-import { workbookFromRows } from './helpers/workbook-fixtures';
+import { workbookFromRows, workbookFromSheets } from './helpers/workbook-fixtures';
 
 test('translatable cell detection preserves numbers, dates, currency, and emails', () => {
   assert.equal(isTranslatableCell('Amount'), true);
@@ -114,11 +116,73 @@ test('remote translation batches large sheets within the backend request limit',
 });
 
 test('supported language list and labels stay consistent', () => {
-  assert.ok(supportedLanguages.length >= 5);
+  assert.ok(supportedLanguages.length >= 6);
   assert.equal(languageLabel('es'), 'Spanish');
   assert.equal(languageLabel('pt'), 'Portuguese');
+  assert.equal(languageLabel('it'), 'Italian');
   supportedLanguages.forEach((language) => {
     assert.ok(language.code.length === 2);
     assert.ok(language.label.length > 1);
   });
+});
+
+test('Italian dictionary translates common spreadsheet phrases', () => {
+  assert.equal(translatePhraseLocally('Amount', 'it'), 'Importo');
+  assert.equal(translatePhraseLocally('Invoice', 'it'), 'Fattura');
+  assert.equal(translatePhraseLocally('PENDING', 'it'), 'IN SOSPESO');
+  assert.equal(translatePhraseLocally('Fecha', 'it'), 'Data');
+});
+
+test('whole-workbook translation covers every sheet without mutating the original', async () => {
+  const workbook = await workbookFromSheets({
+    Invoices: [
+      ['Date', 'Amount', 'Status'],
+      ['2026-01-01', 1200, 'Paid']
+    ],
+    Customers: [
+      ['Name', 'City'],
+      ['Acme Ltd', 'Lagos']
+    ]
+  });
+  const originalSnapshot = JSON.stringify(workbook.sheets.map((sheet) => sheet.rows));
+
+  const result = await translateWorkbook(workbook, 'es');
+
+  assert.deepEqual(result.sheetNames, ['Invoices', 'Customers']);
+  assert.equal(result.sheetName, '2 sheets');
+  const [invoices, customers] = result.workbook.sheets;
+  assert.equal(invoices.rows[0][0], 'Fecha');
+  assert.equal(invoices.rows[1][2], 'Pagado');
+  assert.equal(invoices.rows[1][1], workbook.sheets[0].rows[1][1]);
+  assert.equal(customers.rows[0][0], 'Nombre');
+  assert.equal(customers.rows[0][1], 'Ciudad');
+  assert.equal(customers.headers[0], 'Nombre');
+  assert.equal(JSON.stringify(workbook.sheets.map((sheet) => sheet.rows)), originalSnapshot);
+});
+
+test('workbook copy export round-trips current values including translations', async () => {
+  const workbook = await workbookFromSheets({
+    Data: [
+      ['Status', 'Amount'],
+      ['Pending', 900]
+    ]
+  });
+  const translated = await translateWorkbook(workbook, 'fr');
+  assert.equal(translated.workbook.sheets[0].rows[1][0], 'En attente');
+
+  const bytes = workbookCopyToArrayBuffer(translated.workbook);
+  const file = new File([Buffer.from(bytes)], 'copy.xlsx', {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const reread = await parseWorkbook(file as unknown as globalThis.File);
+
+  assert.equal(reread.sheets[0].headers[0], 'Statut');
+  assert.equal(reread.sheets[0].rows[1][0], 'En attente');
+  assert.equal(String(reread.sheets[0].rows[1][1]), '900');
+
+  // Numeric-looking display strings must export as real numeric cells.
+  const copyBook = buildWorkbookCopy(translated.workbook);
+  const amountCell = copyBook.Sheets[copyBook.SheetNames[0]]['B2'];
+  assert.equal(amountCell.t, 'n');
+  assert.equal(amountCell.v, 900);
 });

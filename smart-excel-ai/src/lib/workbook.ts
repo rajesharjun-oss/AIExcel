@@ -536,4 +536,32 @@ export const downloadCleanWorkbook = (workbook: WorkbookModel): void => {
   XLSX.writeFile(output, `${baseName || 'workbook'}_cleaned.xlsx`);
 };
 
+// Parsing keeps display strings, so numeric-looking text must become real
+// numeric cells again on export (same rule cleanRows applies). Formulas are
+// not preserved: the model only holds values from the moment a file is parsed.
+const coerceCellForExport = (cell: CellValue): CellValue => {
+  if (typeof cell !== 'string') return cell;
+  const trimmed = cell.trim();
+  if (/^-?[\d,]+(\.\d+)?$/.test(trimmed)) return Number(trimmed.replace(/,/g, ''));
+  return cell;
+};
+
+// As-is export: current cell values (including edits and translations), no cleaning.
+export const buildWorkbookCopy = (workbook: WorkbookModel): XLSX.WorkBook => {
+  const output = XLSX.utils.book_new();
+  workbook.sheets.forEach((sheet) => {
+    const worksheet = XLSX.utils.aoa_to_sheet(sheet.rows.map((row) => row.map(coerceCellForExport)));
+    XLSX.utils.book_append_sheet(output, worksheet, sheet.name.slice(0, 31));
+  });
+  return output;
+};
+
+export const workbookCopyToArrayBuffer = (workbook: WorkbookModel): ArrayBuffer =>
+  XLSX.write(buildWorkbookCopy(workbook), { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+export const downloadWorkbookCopy = (workbook: WorkbookModel): void => {
+  const baseName = workbook.fileName.replace(/\.[^.]+$/, '');
+  XLSX.writeFile(buildWorkbookCopy(workbook), `${baseName || 'workbook'}_copy.xlsx`);
+};
+
 export const toPreviewRows = (sheet: SheetData): CellValue[][] => sheet.rows.slice(0, MAX_PREVIEW_ROWS);

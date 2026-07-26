@@ -442,7 +442,11 @@ const run = async () => {
       cell.focus();
       cell.setSelectionRange(cell.value.length, cell.value.length);
       cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-      await new Promise((resolve) => window.setTimeout(resolve, 80));
+      const started = Date.now();
+      while (Date.now() - started < 2_000) {
+        if ((document.activeElement as HTMLElement | null)?.getAttribute('data-cell') !== 'Sheet1-2-2') break;
+        await new Promise((resolve) => window.setTimeout(resolve, 20));
+      }
     });
     const activeAfterArrow = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-cell'));
     assert.equal(activeAfterArrow, 'Sheet1-2-3');
@@ -452,7 +456,11 @@ const run = async () => {
       if (!cell) throw new Error('enter target not found');
       cell.focus();
       cell.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      await new Promise((resolve) => window.setTimeout(resolve, 80));
+      const started = Date.now();
+      while (Date.now() - started < 2_000) {
+        if ((document.activeElement as HTMLElement | null)?.getAttribute('data-cell') !== 'Sheet1-2-3') break;
+        await new Promise((resolve) => window.setTimeout(resolve, 20));
+      }
     });
     const activeAfterEnter = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-cell'));
     assert.equal(activeAfterEnter, 'Sheet1-3-3');
