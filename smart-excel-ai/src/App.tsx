@@ -1,5 +1,7 @@
 import {
   AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
   Bot,
   CheckCircle2,
   Database,
@@ -7,20 +9,23 @@ import {
   FilePlus2,
   FileSpreadsheet,
   Layers3,
+  LineChart,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   MessageSquareText,
   RefreshCw,
+  Scale,
   Search,
-  Sparkles,
   Table2,
+  TrendingUp,
   UploadCloud,
   Wand2
 } from 'lucide-react';
 import { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { askWorkbookAi, userMessage } from './lib/assistant';
+import { analyzeWorkbookFinances, financialFindings, formatMoney } from './lib/finance';
 import { pasteCells, updateCell } from './lib/grid-edit';
 import {
   buildWorkbookProfile,
@@ -33,9 +38,10 @@ import {
   parseWorkbook,
   searchWorkbook
 } from './lib/workbook';
-import type { AssistantMessage, Finding, FindingSeverity, SheetData, WorkbookModel } from './types';
+import type { AssistantMessage, FinancialReport, Finding, FindingSeverity, SheetData, WorkbookModel } from './types';
 
 type ActionKey = 'duplicates' | 'inconsistencies' | 'clean' | 'summary';
+type DataView = 'grid' | 'insights';
 
 const severityLabels: Record<FindingSeverity, string> = {
   high: 'High',
@@ -103,6 +109,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [sheetsCollapsed, setSheetsCollapsed] = useState(false);
   const [assistantCollapsed, setAssistantCollapsed] = useState(false);
+  const [dataView, setDataView] = useState<DataView>('grid');
+  const [financialReport, setFinancialReport] = useState<FinancialReport | null>(null);
 
   const profile = useMemo(() => (workbook ? buildWorkbookProfile(workbook) : null), [workbook]);
   const activeSheet = useMemo(
@@ -114,6 +122,8 @@ function App() {
     setIsParsing(true);
     setError(null);
     setCleanReady(false);
+    setDataView('grid');
+    setFinancialReport(null);
     try {
       const parsed = await parseWorkbook(file);
       const nextProfile = buildWorkbookProfile(parsed);
@@ -154,6 +164,8 @@ function App() {
     setFindings(makeSummaryFindings(blank, nextProfile));
     setCleanReady(false);
     setError(null);
+    setDataView('grid');
+    setFinancialReport(null);
     setMessages([
       {
         id: 'blank-workbook',
@@ -216,6 +228,35 @@ function App() {
         findings: results
       }
     ]);
+  };
+
+  const runInsights = () => {
+    if (!workbook) return;
+    const report = analyzeWorkbookFinances(workbook, activeSheet?.name);
+    setFinancialReport(report);
+    setDataView('insights');
+    if (report) {
+      const nextFindings = financialFindings(report);
+      setFindings(nextFindings);
+      setMessages((current) => [
+        ...current,
+        {
+          id: `insights-${Date.now()}`,
+          role: 'assistant',
+          text: `Financial insights ready for ${report.sheetName}: net ${formatMoney(report.net, report.currencySymbol)} across ${report.transactionCount} transactions.`,
+          findings: nextFindings
+        }
+      ]);
+    } else {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `insights-${Date.now()}`,
+          role: 'assistant',
+          text: 'No amount or debit/credit column was detected, so financial insights are unavailable. Add or rename an amount column and try again.'
+        }
+      ]);
+    }
   };
 
   const askAi = async (event: FormEvent) => {
@@ -287,6 +328,10 @@ function App() {
           {activeAction === 'summary' ? <RefreshCw className="spin" size={17} /> : <Database size={17} />}
           Summary
         </button>
+        <button className="button emerald" type="button" disabled={!workbook} onClick={runInsights}>
+          <LineChart size={17} />
+          Financial Insights
+        </button>
         <div className="search-box">
           <Search size={17} />
           <input
@@ -343,8 +388,19 @@ function App() {
         <section className="data-pane">
           {workbook && activeSheet ? (
             <>
-              <SheetSummary sheet={activeSheet} />
-              <SheetPreview sheet={activeSheet} onEditCell={editCell} onPasteCells={pasteIntoCell} />
+              <SheetSummary
+                sheet={activeSheet}
+                view={dataView}
+                onViewChange={(view) => {
+                  if (view === 'insights') runInsights();
+                  else setDataView('grid');
+                }}
+              />
+              {dataView === 'insights' ? (
+                <InsightsPanel report={financialReport} />
+              ) : (
+                <SheetPreview sheet={activeSheet} onEditCell={editCell} onPasteCells={pasteIntoCell} />
+              )}
             </>
           ) : (
             <UploadPanel isParsing={isParsing} onDrop={handleDrop} onBrowse={() => fileInputRef.current?.click()} onNewWorkbook={openBlankWorkbook} />
@@ -452,7 +508,15 @@ function UploadPanel({
   );
 }
 
-function SheetSummary({ sheet }: { sheet: SheetData }) {
+function SheetSummary({
+  sheet,
+  view,
+  onViewChange
+}: {
+  sheet: SheetData;
+  view: DataView;
+  onViewChange: (view: DataView) => void;
+}) {
   return (
     <div className="sheet-summary">
       <div>
@@ -462,6 +526,147 @@ function SheetSummary({ sheet }: { sheet: SheetData }) {
       <Stat label="Data rows" value={sheet.rowCount.toLocaleString()} />
       <Stat label="Columns" value={sheet.columnCount.toLocaleString()} />
       <Stat label="Header row" value={(sheet.headerRowIndex + 1).toLocaleString()} />
+      <div className="view-toggle" role="tablist" aria-label="Data view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'grid'}
+          className={view === 'grid' ? 'active' : ''}
+          onClick={() => onViewChange('grid')}
+        >
+          <Table2 size={15} />
+          Grid
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'insights'}
+          className={view === 'insights' ? 'active' : ''}
+          onClick={() => onViewChange('insights')}
+        >
+          <LineChart size={15} />
+          Insights
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function InsightsPanel({ report }: { report: FinancialReport | null }) {
+  if (!report) {
+    return (
+      <div className="muted-block">
+        No financial columns detected. Add or rename an amount (or debit/credit) column, then run Financial Insights.
+      </div>
+    );
+  }
+
+  const symbol = report.currencySymbol;
+  const netPositive = report.net >= 0;
+  const categoryScale = Math.max(1, ...report.categories.map((category) => Math.abs(category.total)));
+  const monthlyScale = Math.max(1, ...report.monthly.map((month) => Math.max(month.inflow, month.outflow)));
+
+  return (
+    <div className="insights-panel">
+      <div className="kpi-row">
+        <Kpi tone="inflow" icon={<ArrowUpRight size={16} />} label="Total inflow" value={formatMoney(report.totalInflow, symbol)} />
+        <Kpi tone="outflow" icon={<ArrowDownRight size={16} />} label="Total outflow" value={formatMoney(report.totalOutflow, symbol)} />
+        <Kpi tone={netPositive ? 'inflow' : 'outflow'} icon={<Scale size={16} />} label="Net position" value={formatMoney(report.net, symbol)} />
+        <Kpi tone="neutral" icon={<TrendingUp size={16} />} label="Transactions" value={report.transactionCount.toLocaleString()} sub={`Avg ${formatMoney(report.averageAmount, symbol)}`} />
+      </div>
+
+      <div className="insights-columns">
+        <section className="insights-card">
+          <div className="rail-heading">
+            <Layers3 size={16} />
+            Top {report.groupedBy.toLowerCase()} by value
+          </div>
+          {report.categories.length ? (
+            <div className="bar-list">
+              {report.categories.slice(0, 8).map((category) => (
+                <div className="bar-row" key={category.label}>
+                  <div className="bar-label" title={category.label}>
+                    <span>{category.label}</span>
+                    <strong className={category.total < 0 ? 'negative' : 'positive'}>{formatMoney(category.total, symbol)}</strong>
+                  </div>
+                  <div className="bar-track">
+                    <div
+                      className={`bar-fill ${category.total < 0 ? 'outflow' : 'inflow'}`}
+                      style={{ width: `${Math.max(3, (Math.abs(category.total) / categoryScale) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="muted-inline">No groupable values found.</div>
+          )}
+        </section>
+
+        <section className="insights-card">
+          <div className="rail-heading">
+            <LineChart size={16} />
+            Monthly cashflow
+          </div>
+          {report.monthly.length ? (
+            <div className="month-list">
+              {report.monthly.map((month) => (
+                <div className="month-row" key={month.month}>
+                  <span className="month-label">{month.label}</span>
+                  <div className="month-bars">
+                    <div className="month-bar inflow" style={{ width: `${(month.inflow / monthlyScale) * 100}%` }} title={`Inflow ${formatMoney(month.inflow, symbol)}`} />
+                    <div className="month-bar outflow" style={{ width: `${(month.outflow / monthlyScale) * 100}%` }} title={`Outflow ${formatMoney(month.outflow, symbol)}`} />
+                  </div>
+                  <strong className={month.net < 0 ? 'negative' : 'positive'}>{formatMoney(month.net, symbol)}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="muted-inline">No date column detected for a monthly trend.</div>
+          )}
+        </section>
+      </div>
+
+      {report.anomalies.length ? (
+        <section className="insights-card">
+          <div className="rail-heading">
+            <AlertTriangle size={16} />
+            {report.anomalies.length} unusual amount{report.anomalies.length === 1 ? '' : 's'}
+          </div>
+          <div className="anomaly-list">
+            {report.anomalies.slice(0, 8).map((anomaly) => (
+              <div className="anomaly-row" key={`${anomaly.rowNumber}-${anomaly.amount}`}>
+                <span className="anomaly-amount">{formatMoney(anomaly.amount, symbol)}</span>
+                <span className="anomaly-desc" title={anomaly.description}>{anomaly.description}</span>
+                <small>Row {anomaly.rowNumber}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function Kpi({
+  tone,
+  icon,
+  label,
+  value,
+  sub
+}: {
+  tone: 'inflow' | 'outflow' | 'neutral';
+  icon: JSX.Element;
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className={`kpi kpi-${tone}`}>
+      <span className="kpi-icon">{icon}</span>
+      <span className="kpi-label">{label}</span>
+      <strong className="kpi-value">{value}</strong>
+      {sub ? <small className="kpi-sub">{sub}</small> : null}
     </div>
   );
 }

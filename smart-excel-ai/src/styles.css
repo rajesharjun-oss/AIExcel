@@ -644,6 +644,243 @@ th.row-number {
   padding: 11px 13px;
 }
 
+.button.emerald {
+  border-color: var(--emerald);
+  background: linear-gradient(180deg, #235a4a 0%, var(--emerald-dark) 100%);
+  color: #eaf3ef;
+}
+
+.view-toggle {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid rgba(91, 68, 37, 0.24);
+  background: var(--surface-strong);
+  padding: 3px;
+}
+
+.view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 12px;
+  font-weight: 700;
+}
+
+.view-toggle button.active {
+  background: var(--emerald);
+  color: #fff;
+}
+
+.insights-panel {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  padding: 12px;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.kpi {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 10px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  background: var(--surface);
+  padding: 12px 14px;
+  box-shadow: 0 10px 24px rgba(52, 42, 26, 0.06);
+}
+
+.kpi-inflow {
+  border-left-color: var(--emerald);
+}
+
+.kpi-outflow {
+  border-left-color: var(--brick);
+}
+
+.kpi-neutral {
+  border-left-color: var(--champagne);
+}
+
+.kpi-icon {
+  display: grid;
+  place-items: center;
+  grid-row: span 2;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  color: var(--emerald-dark);
+}
+
+.kpi-outflow .kpi-icon {
+  color: var(--brick);
+}
+
+.kpi-label {
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.kpi-value {
+  font-size: 1.18rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-sub {
+  grid-column: 2;
+  color: var(--muted);
+}
+
+.insights-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.insights-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 12px;
+}
+
+.bar-list,
+.month-list,
+.anomaly-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.bar-row {
+  display: grid;
+  gap: 5px;
+}
+
+.bar-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.86rem;
+}
+
+.bar-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-label strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bar-track {
+  height: 10px;
+  background: #efe6d3;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+}
+
+.bar-fill.inflow,
+.month-bar.inflow {
+  background: linear-gradient(90deg, #2f6a57, var(--emerald));
+}
+
+.bar-fill.outflow,
+.month-bar.outflow {
+  background: linear-gradient(90deg, #c0603f, var(--brick));
+}
+
+.month-row {
+  display: grid;
+  grid-template-columns: 78px 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.month-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.month-bars {
+  display: grid;
+  gap: 3px;
+}
+
+.month-bar {
+  height: 8px;
+  min-width: 2px;
+}
+
+.month-row strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+}
+
+.anomaly-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  border-left: 3px solid var(--brick);
+  background: #fff1eb;
+  padding: 7px 10px;
+}
+
+.anomaly-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  color: var(--brick);
+}
+
+.anomaly-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anomaly-row small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.muted-inline {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.positive {
+  color: var(--emerald-dark);
+}
+
+.negative {
+  color: var(--brick);
+}
+
 .spin {
   animation: spin 0.9s linear infinite;
 }

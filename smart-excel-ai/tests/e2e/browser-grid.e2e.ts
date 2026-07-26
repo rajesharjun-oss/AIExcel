@@ -15,8 +15,15 @@ const chromePort = Number(process.env.E2E_CHROME_PORT || 9300 + Math.floor(Math.
 const appUrl = `http://127.0.0.1:${port}/`;
 const chromeCandidates = [
   process.env.CHROME_PATH,
+  process.env.PLAYWRIGHT_BROWSERS_PATH ? path.join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium') : undefined,
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser'
 ].filter(Boolean) as string[];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -54,7 +61,10 @@ const findChrome = () => {
 };
 
 const startVite = (): ChildProcessWithoutNullStreams => {
-  const child = spawn('cmd.exe', ['/c', 'npm', 'run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)], {
+  const devArgs = ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)];
+  const [command, args] =
+    process.platform === 'win32' ? (['cmd.exe', ['/c', 'npm', ...devArgs]] as const) : (['npm', devArgs] as const);
+  const child = spawn(command, args, {
     cwd: process.cwd(),
     stdio: 'pipe',
     windowsHide: true

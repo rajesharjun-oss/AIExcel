@@ -1,4 +1,5 @@
 import type { AssistantMessage, Finding, WorkbookModel, WorkbookProfile } from '../types';
+import { analyzeWorkbookFinances, financialFindings, formatMoney } from './finance';
 import {
   buildWorkbookProfile,
   compareSheets,
@@ -54,6 +55,25 @@ const createLocalAnswer = (question: string, workbook: WorkbookModel, profile: W
       text = `I compared ${mentionedSheets[0]} against ${mentionedSheets[1]} using normalized full-row matches.\n\n${formatFindings(findings, `Every non-empty row in ${mentionedSheets[0]} had an exact normalized match in ${mentionedSheets[1]}.`)}`;
     } else {
       text = `I can compare sheets, but I need two sheet names in the question. Available sheets: ${workbook.sheets.map((sheet) => sheet.name).join(', ')}.`;
+    }
+  } else if (/(cash\s?flow|inflow|outflow|\bnet\b|income|revenue|profit|spend|spent|expense|expenditure|how much|total amount|biggest|largest|top (category|expense|spend)|anomal|unusual amount)/.test(normalized)) {
+    const report = analyzeWorkbookFinances(workbook);
+    if (report) {
+      findings = financialFindings(report);
+      const symbol = report.currencySymbol;
+      const topCategory = report.categories[0];
+      const lines = [
+        `Financial read on ${report.sheetName} (${report.transactionCount} transactions):`,
+        `- Inflow: ${formatMoney(report.totalInflow, symbol)}`,
+        `- Outflow: ${formatMoney(report.totalOutflow, symbol)}`,
+        `- Net: ${formatMoney(report.net, symbol)}`
+      ];
+      if (report.largestOutflow) lines.push(`- Largest outflow: ${formatMoney(report.largestOutflow.amount, symbol)} (${report.largestOutflow.description}, row ${report.largestOutflow.rowNumber})`);
+      if (topCategory) lines.push(`- Top ${normalizeText(report.groupedBy)}: ${topCategory.label} at net ${formatMoney(topCategory.total, symbol)}`);
+      if (report.anomalies.length) lines.push(`- ${report.anomalies.length} unusual amount${report.anomalies.length === 1 ? '' : 's'} flagged for review.`);
+      text = lines.join('\n');
+    } else {
+      text = 'I could not find a clear amount or debit/credit column to run a financial analysis. Add or rename an amount column, then ask again.';
     }
   } else {
     findings = searchWorkbook(workbook, question);

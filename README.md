@@ -3,8 +3,20 @@
 AIExcel is a smart spreadsheet assistant project with two complementary paths:
 
 - `addin/`, `backend/`, and `shared/`: an existing Office Add-in architecture for embedding AI directly inside Excel.
-- `smart-excel-ai/`: a browser-based MVP for uploading Excel/CSV files, indexing every sheet, asking workbook-aware questions, finding duplicates, finding inconsistencies, cleaning data, and downloading cleaned workbooks.
+- `smart-excel-ai/`: a browser-based MVP for uploading Excel/CSV files, indexing every sheet, asking workbook-aware questions, finding duplicates, finding inconsistencies, cleaning data, running financial intelligence, and downloading cleaned workbooks.
   Uploaded sheets open in an editable grid with direct cell entry, keyboard movement, and multi-cell paste support.
+
+## Financial Intelligence
+
+The browser MVP includes a financial intelligence engine that turns a raw ledger, bank statement, or transaction export into a cashflow dashboard. Click **Financial Insights** (or ask a money question in the assistant) and it will:
+
+- Auto-detect the date, amount (or separate debit/credit), category, and description columns — no manual mapping required.
+- Compute cashflow KPIs: total inflow, total outflow, net position, transaction count, and average amount.
+- Break spending and income down by category (or description) ranked by value.
+- Chart a month-by-month cashflow trend when a date column is present.
+- Flag statistically unusual amounts using an interquartile-range fence, so oversized entries and misplaced totals surface automatically.
+
+The engine is pure and read-only — it never mutates the workbook — and the assistant answers questions like "what is my net cashflow", "biggest expense", or "top category" from the same report. Detection, KPIs, category grouping, monthly buckets, and anomaly detection are all covered by `tests/test_finance.test.ts`.
 
 ## Browser MVP
 
@@ -75,6 +87,7 @@ The suite lives under `smart-excel-ai/tests/`:
 - `test_cleaning.test.ts` checks duplicate detection, whitespace/date/number cleaning, blank required fields, invalid numbers, and outlier amounts.
 - `test_rules.test.ts` checks rule-based categorization, review flags, and total preservation.
 - `test_ai_chat.test.ts` checks the local Ask AI fallback uses current workbook findings and does not mutate data.
-- `e2e/browser-grid.e2e.ts` starts Vite and headless Chrome to verify upload, real cell editing, multi-cell paste, keyboard movement, shortcut-style replacement, and export readiness in the browser.
+- `test_finance.test.ts` checks financial column detection, cashflow totals, category ranking, monthly bucketing, IQR anomaly detection, debit/credit netting, and the cashflow answer in the Ask AI fallback.
+- `e2e/browser-grid.e2e.ts` starts Vite and headless Chrome to verify upload, real cell editing, multi-cell paste, keyboard movement, shortcut-style replacement, and export readiness in the browser. It resolves Chrome from `CHROME_PATH`, a Playwright browser path, or common install locations, and runs on Windows, macOS, and Linux.
 
 To add a new case, place a generic sample file in `smart-excel-ai/tests/fixtures/`, add expected counts or rows in `smart-excel-ai/tests/expected/` when useful, then add a focused assertion to the matching test file. Keep client-specific files out of the suite.
