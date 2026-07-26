@@ -9,7 +9,7 @@ import {
   translateSheet,
   translateWorkbook
 } from '../src/lib/translate';
-import { parseWorkbook, workbookCopyToArrayBuffer } from '../src/lib/workbook';
+import { buildWorkbookCopy, parseWorkbook, workbookCopyToArrayBuffer } from '../src/lib/workbook';
 import { test } from './helpers/test-runner';
 import { workbookFromRows, workbookFromSheets } from './helpers/workbook-fixtures';
 
@@ -179,4 +179,10 @@ test('workbook copy export round-trips current values including translations', a
   assert.equal(reread.sheets[0].headers[0], 'Statut');
   assert.equal(reread.sheets[0].rows[1][0], 'En attente');
   assert.equal(String(reread.sheets[0].rows[1][1]), '900');
+
+  // Numeric-looking display strings must export as real numeric cells.
+  const copyBook = buildWorkbookCopy(translated.workbook);
+  const amountCell = copyBook.Sheets[copyBook.SheetNames[0]]['B2'];
+  assert.equal(amountCell.t, 'n');
+  assert.equal(amountCell.v, 900);
 });
