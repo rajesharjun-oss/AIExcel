@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 type RawRequest = {
   on(event: 'data', listener: (chunk: Buffer) => void): void;
@@ -43,7 +43,14 @@ const parseTranslationArray = (raw: string, expectedLength: number): string[] | 
   }
 };
 
-const aiProxyPlugin = (): Plugin => ({
+// Server-only settings for the dev proxy. Vite does not load .env files into
+// process.env for the config's own runtime, so values from .env.local must
+// come through loadEnv; process.env stays as a fallback for shell-set values.
+// These are never exposed to client code.
+const aiProxyPlugin = (env: Record<string, string>): Plugin => {
+  const setting = (key: string): string => env[key] || process.env[key] || '';
+
+  return {
   name: 'smart-excel-ai-proxy',
   configureServer(server) {
     server.middlewares.use('/api/translate', async (req, res) => {
@@ -66,13 +73,13 @@ const aiProxyPlugin = (): Plugin => ({
         }
 
         // Preferred: forward to the AIExcel backend translate route when it is running.
-        const backendUrl = process.env.AIEXCEL_BACKEND_URL || '';
+        const backendUrl = setting('AIEXCEL_BACKEND_URL');
         if (backendUrl) {
           const backendResponse = await fetch(`${backendUrl.replace(/\/$/, '')}/v1/translate`, {
             method: 'POST',
             headers: {
               'content-type': 'application/json',
-              ...(process.env.AIEXCEL_BACKEND_KEY ? { authorization: `Bearer ${process.env.AIEXCEL_BACKEND_KEY}` } : {})
+              ...(setting('AIEXCEL_BACKEND_KEY') ? { authorization: `Bearer ${setting('AIEXCEL_BACKEND_KEY')}` } : {})
             },
             body: JSON.stringify({ texts, targetLanguage })
           });
@@ -83,8 +90,8 @@ const aiProxyPlugin = (): Plugin => ({
           return;
         }
 
-        const apiUrl = process.env.AI_API_URL || (process.env.OPENAI_API_KEY ? 'https://api.openai.com/v1/responses' : '');
-        const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
+        const apiUrl = setting('AI_API_URL') || (setting('OPENAI_API_KEY') ? 'https://api.openai.com/v1/responses' : '');
+        const apiKey = setting('AI_API_KEY') || setting('OPENAI_API_KEY');
         if (!apiUrl || !apiKey) {
           res.statusCode = 501;
           res.setHeader('content-type', 'application/json');
@@ -98,7 +105,7 @@ const aiProxyPlugin = (): Plugin => ({
         const translationRequest = `Translate the following spreadsheet values into ${targetLanguage}.\n\nValues (JSON array):\n${JSON.stringify(texts)}`;
         const providerBody = isOpenAiResponses
           ? {
-              model: process.env.OPENAI_MODEL || process.env.AI_MODEL || 'gpt-4o-mini',
+              model: setting('OPENAI_MODEL') || setting('AI_MODEL') || 'gpt-4o-mini',
               input: [
                 { role: 'system', content: translationInstruction },
                 { role: 'user', content: translationRequest }
@@ -151,8 +158,27 @@ const aiProxyPlugin = (): Plugin => ({
 
       try {
         const body = await readJsonBody(req as RawRequest);
-        const apiUrl = process.env.AI_API_URL || (process.env.OPENAI_API_KEY ? 'https://api.openai.com/v1/responses' : '');
-        const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
+
+        // Preferred: forward to the AIExcel backend workbook-ask route when it is running.
+        const backendUrl = setting('AIEXCEL_BACKEND_URL');
+        if (backendUrl) {
+          const backendResponse = await fetch(`${backendUrl.replace(/\/$/, '')}/v1/workbook-ask`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              ...(setting('AIEXCEL_BACKEND_KEY') ? { authorization: `Bearer ${setting('AIEXCEL_BACKEND_KEY')}` } : {})
+            },
+            body: JSON.stringify(body)
+          });
+          const backendData = await backendResponse.json();
+          res.statusCode = backendResponse.status;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(backendData));
+          return;
+        }
+
+        const apiUrl = setting('AI_API_URL') || (setting('OPENAI_API_KEY') ? 'https://api.openai.com/v1/responses' : '');
+        const apiKey = setting('AI_API_KEY') || setting('OPENAI_API_KEY');
 
         if (!apiUrl || !apiKey) {
           res.statusCode = 501;
@@ -164,7 +190,7 @@ const aiProxyPlugin = (): Plugin => ({
         const isOpenAiResponses = apiUrl.includes('/v1/responses');
         const providerBody = isOpenAiResponses
           ? {
-              model: process.env.OPENAI_MODEL || process.env.AI_MODEL || 'gpt-4o-mini',
+              model: setting('OPENAI_MODEL') || setting('AI_MODEL') || 'gpt-4o-mini',
               input: [
                 {
                   role: 'system',
@@ -212,12 +238,13 @@ const aiProxyPlugin = (): Plugin => ({
       }
     });
   }
-});
+  };
+};
 
-export default defineConfig({
-  plugins: [react(), aiProxyPlugin()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), aiProxyPlugin(loadEnv(mode, process.cwd(), ''))],
   server: {
     host: '0.0.0.0',
     port: 5177
   }
-});
+}));

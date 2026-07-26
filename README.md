@@ -68,6 +68,8 @@ npm run dev
 
 The browser MVP works without an API key by using local workbook tools. To connect a real AI provider, add provider values in `smart-excel-ai/.env.local`; keep keys server-side and do not expose them through browser `VITE_` variables.
 
+The preferred setup runs the repository's own backend (Anthropic-powered): set `ANTHROPIC_API_KEY` in `backend/.env`, start it with `npm run dev --workspace=backend`, and set `AIEXCEL_BACKEND_URL=http://localhost:3001` in `smart-excel-ai/.env.local`. Ask AI then routes through `/v1/workbook-ask` with the workbook profile, current findings, and the financial report as context, with answers cached server-side; translation routes through `/v1/translate` the same way. Without a backend or provider key, both features keep working through the local fallback.
+
 ## Automated Tests
 
 Run the Smart Excel test suite from the repository root:

@@ -102,7 +102,8 @@ export const askWorkbookAi = async (
       body: JSON.stringify({
         question,
         workbookProfile: profile,
-        visibleFindings: visibleFindings.slice(0, 40)
+        visibleFindings: visibleFindings.slice(0, 40),
+        financialReport: analyzeWorkbookFinances(workbook)
       })
     });
 
