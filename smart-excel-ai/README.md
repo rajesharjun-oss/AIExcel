@@ -91,4 +91,13 @@ AI_API_KEY=your_key_here
 AI_MODEL=your_model_name
 ```
 
+Translation requests go through the dev server's `/api/translate` proxy. To route them to the AIExcel Express backend (`/v1/translate`) instead of a generic provider, set:
+
+```bash
+AIEXCEL_BACKEND_URL=http://localhost:3001
+AIEXCEL_BACKEND_KEY=your_backend_api_key   # optional, sent as a Bearer token
+```
+
+Large sheets are translated in batches of up to 200 unique values per request to match the backend schema; values longer than 500 characters stay untranslated.
+
 Keep provider keys on the server side. Do not place them in browser-exposed `VITE_` variables.

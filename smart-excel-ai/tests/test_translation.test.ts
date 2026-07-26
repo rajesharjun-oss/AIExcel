@@ -78,6 +78,41 @@ test('translation reports findings and supports revert via the original model', 
   assert.equal(result.workbook.sheets[0].rows[0][0], 'Nom');
 });
 
+test('remote translation batches large sheets within the backend request limit', async () => {
+  const longText = 'This value is far too long to translate remotely. '.repeat(12);
+  const rows: Array<Array<string | number>> = [['Header']];
+  for (let index = 0; index < 250; index += 1) {
+    rows.push([`Unique phrase number ${index}`]);
+  }
+  rows.push([longText]);
+  const workbook = await workbookFromRows(rows);
+
+  const batchSizes: number[] = [];
+  const requestedTexts: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: unknown, init: any) => {
+    const body = JSON.parse(String(init?.body ?? '{}'));
+    batchSizes.push(body.texts.length);
+    requestedTexts.push(...body.texts);
+    return {
+      ok: true,
+      json: async () => ({ translations: body.texts.map((text: string) => `ES ${text}`), cached: false })
+    };
+  }) as typeof fetch;
+
+  try {
+    const result = await translateSheet(workbook, workbook.sheets[0].name, 'es');
+    assert.equal(result.usedRemoteAi, true);
+    assert.ok(batchSizes.length >= 2, `expected multiple batches, got ${batchSizes.length}`);
+    assert.ok(batchSizes.every((size) => size <= 200), `batch sizes ${batchSizes.join(', ')}`);
+    assert.equal(result.workbook.sheets[0].rows[1][0], 'ES Unique phrase number 0');
+    assert.ok(!requestedTexts.includes(longText.trim()), 'over-length values must not be sent remotely');
+    assert.equal(result.workbook.sheets[0].rows[rows.length - 1][0], longText);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('supported language list and labels stay consistent', () => {
   assert.ok(supportedLanguages.length >= 5);
   assert.equal(languageLabel('es'), 'Spanish');

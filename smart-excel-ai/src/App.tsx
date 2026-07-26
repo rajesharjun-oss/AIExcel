@@ -178,11 +178,14 @@ function App() {
 
   const editCell = (sheetName: string, rowIndex: number, columnIndex: number, value: string) => {
     setCleanReady(false);
+    // Manual edits invalidate the translation snapshot so Revert can never discard them.
+    setTranslationBackup(null);
     setWorkbook((current) => (current ? updateCell(current, sheetName, rowIndex, columnIndex, value) : current));
   };
 
   const pasteIntoCell = (sheetName: string, rowIndex: number, columnIndex: number, text: string) => {
     setCleanReady(false);
+    setTranslationBackup(null);
     setWorkbook((current) => (current ? pasteCells(current, sheetName, rowIndex, columnIndex, text) : current));
   };
 

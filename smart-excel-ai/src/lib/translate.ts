@@ -133,14 +133,33 @@ export const translatePhraseLocally = (text: string, targetLanguage: LanguageCod
   return matchCasing(text.trim(), translated);
 };
 
+// Mirror the backend /v1/translate schema so no batch is rejected outright.
+const MAX_BATCH_TEXTS = 200;
+const MAX_TEXT_LENGTH = 500;
+
 const collectTranslatableTexts = (sheet: SheetData): string[] => {
   const unique = new Set<string>();
   sheet.rows.forEach((row) => {
     row.forEach((cell) => {
-      if (isTranslatableCell(cell)) unique.add(cell.trim());
+      if (isTranslatableCell(cell) && cell.trim().length <= MAX_TEXT_LENGTH) unique.add(cell.trim());
     });
   });
   return Array.from(unique);
+};
+
+const fetchTranslationBatch = async (
+  texts: string[],
+  targetLanguage: LanguageCode
+): Promise<string[] | null> => {
+  const response = await fetch('/api/translate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ texts, targetLanguage })
+  });
+  if (!response.ok) return null;
+  const data = await response.json();
+  if (!Array.isArray(data?.translations) || data.translations.length !== texts.length) return null;
+  return data.translations;
 };
 
 const fetchRemoteTranslations = async (
@@ -148,20 +167,22 @@ const fetchRemoteTranslations = async (
   targetLanguage: LanguageCode
 ): Promise<Map<string, string> | null> => {
   try {
-    const response = await fetch('/api/translate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ texts, targetLanguage })
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (!Array.isArray(data?.translations) || data.translations.length !== texts.length) return null;
     const map = new Map<string, string>();
-    texts.forEach((text, index) => {
-      const translated = data.translations[index];
-      if (typeof translated === 'string' && translated.trim()) map.set(text, translated.trim());
-    });
-    return map;
+    for (let start = 0; start < texts.length; start += MAX_BATCH_TEXTS) {
+      const batch = texts.slice(start, start + MAX_BATCH_TEXTS);
+      const translations = await fetchTranslationBatch(batch, targetLanguage);
+      if (!translations) {
+        // A failure on the very first batch means the provider is unavailable;
+        // skip the remaining batches instead of repeating doomed requests.
+        if (start === 0) return null;
+        continue;
+      }
+      batch.forEach((text, index) => {
+        const translated = translations[index];
+        if (typeof translated === 'string' && translated.trim()) map.set(text, translated.trim());
+      });
+    }
+    return map.size ? map : null;
   } catch {
     // Local dictionary keeps translation working when no AI provider is configured.
     return null;
