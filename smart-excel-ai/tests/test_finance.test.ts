@@ -78,6 +78,35 @@ test('separate debit and credit columns net to a signed amount', async () => {
   assert.equal(report!.net, 850);
 });
 
+test('a lone debit column is treated as outflow, not inflow', async () => {
+  const workbook = await workbookFromRows([
+    ['Date', 'Narration', 'Debit'],
+    ['2026-01-04', 'Supplier payment', '100'],
+    ['2026-01-06', 'Bank charge', '25']
+  ]);
+  const report = analyzeSheetFinances(workbook.sheets[0]);
+
+  assert.ok(report, 'expected a financial report');
+  assert.equal(report!.columns.debitIndex, 2);
+  assert.equal(report!.columns.creditIndex, -1);
+  assert.equal(report!.totalInflow, 0);
+  assert.equal(report!.totalOutflow, 125);
+  assert.equal(report!.net, -125);
+});
+
+test('first-of-month dates stay in their calendar month regardless of timezone', async () => {
+  const workbook = await workbookFromRows([
+    ['Date', 'Description', 'Amount'],
+    ['2026-01-01', 'January opening', '100'],
+    ['2026-02-01', 'February opening', '200'],
+    ['2026-03-01', 'March opening', '300']
+  ]);
+  const report = analyzeSheetFinances(workbook.sheets[0])!;
+
+  assert.deepEqual(report.monthly.map((month) => month.month), ['2026-01', '2026-02', '2026-03']);
+  assert.deepEqual(report.monthly.map((month) => month.inflow), [100, 200, 300]);
+});
+
 test('non-financial sheets return no report', async () => {
   const workbook = await workbookFromRows([
     ['First name', 'Last name', 'City'],

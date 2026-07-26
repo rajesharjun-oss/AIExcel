@@ -130,6 +130,13 @@ function App() {
     [activeSheetName, workbook]
   );
 
+  // Keep the Insights view in sync when the user switches sheets or edits data
+  // while it is open; otherwise it would keep showing the previous report.
+  useEffect(() => {
+    if (dataView !== 'insights') return;
+    setFinancialReport(workbook ? analyzeWorkbookFinances(workbook, activeSheet?.name) : null);
+  }, [activeSheet, dataView, workbook]);
+
   const handleFile = async (file: File) => {
     setIsParsing(true);
     setError(null);

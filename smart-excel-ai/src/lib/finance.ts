@@ -59,9 +59,14 @@ const detectDateIndex = (sheet: SheetData): number => {
 };
 
 const detectAmountColumns = (sheet: SheetData, dateIndex: number): Pick<FinancialColumnMap, 'amountIndex' | 'debitIndex' | 'creditIndex'> => {
-  const debitIndex = headerMatches(sheet, /(debit|withdrawal|money out|paid out|\bdr\b|outflow|expense|spent)/);
-  const creditIndex = headerMatches(sheet, /(credit|deposit|money in|paid in|\bcr\b|inflow|income|received)/);
-  if (debitIndex >= 0 && creditIndex >= 0 && debitIndex !== creditIndex) {
+  const rawDebitIndex = headerMatches(sheet, /(debit|withdrawal|money out|paid out|\bdr\b|outflow|expense|spent)/);
+  const rawCreditIndex = headerMatches(sheet, /(credit|deposit|money in|paid in|\bcr\b|inflow|income|received)/);
+  // Keep a lone debit or credit column too: bank exports often have only one,
+  // and its sign convention must survive (a debit-only column is outflow).
+  const numericEnough = (index: number) => index >= 0 && columnNumberRatio(sheet, index) >= 0.4;
+  const debitIndex = numericEnough(rawDebitIndex) ? rawDebitIndex : -1;
+  const creditIndex = numericEnough(rawCreditIndex) ? rawCreditIndex : -1;
+  if ((debitIndex >= 0 || creditIndex >= 0) && debitIndex !== creditIndex) {
     return { amountIndex: -1, debitIndex, creditIndex };
   }
 
@@ -128,10 +133,30 @@ const detectCurrencySymbol = (sheet: SheetData, columns: FinancialColumnMap): st
 
 const monthKey = (value: CellValue | undefined): { month: string; label: string } | null => {
   if (isBlank(value)) return null;
-  const date = value instanceof Date ? value : new Date(cellToText(value));
-  if (Number.isNaN(date.getTime())) return null;
-  const year = date.getFullYear();
-  const monthIndex = date.getMonth();
+  let year: number;
+  let monthIndex: number;
+
+  if (value instanceof Date) {
+    year = value.getFullYear();
+    monthIndex = value.getMonth();
+  } else {
+    const text = cellToText(value).trim();
+    // Date-only strings like 2026-01-01 parse as UTC instants, so reading them
+    // with local getters shifts first-of-month rows into the previous month in
+    // negative UTC offsets. Read the calendar components directly instead.
+    const isoMatch = text.match(/^(\d{4})[-/](\d{1,2})(?:[-/](\d{1,2}))?$/);
+    if (isoMatch) {
+      year = Number(isoMatch[1]);
+      monthIndex = Number(isoMatch[2]) - 1;
+    } else {
+      const date = new Date(text);
+      if (Number.isNaN(date.getTime())) return null;
+      year = date.getFullYear();
+      monthIndex = date.getMonth();
+    }
+  }
+
+  if (monthIndex < 0 || monthIndex > 11) return null;
   return {
     month: `${year}-${String(monthIndex + 1).padStart(2, '0')}`,
     label: `${MONTH_LABELS[monthIndex]} ${year}`
