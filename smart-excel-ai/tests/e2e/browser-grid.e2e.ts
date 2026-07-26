@@ -15,6 +15,7 @@ const chromePort = Number(process.env.E2E_CHROME_PORT || 9300 + Math.floor(Math.
 const appUrl = `http://127.0.0.1:${port}/`;
 const chromeCandidates = [
   process.env.CHROME_PATH,
+  process.env.PLAYWRIGHT_BROWSERS_PATH ? path.join(process.env.PLAYWRIGHT_BROWSERS_PATH, 'chromium') : undefined,
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   '/opt/pw-browsers/chromium',
@@ -22,7 +23,8 @@ const chromeCandidates = [
   '/usr/bin/chromium-browser',
   '/usr/bin/google-chrome',
   '/usr/bin/google-chrome-stable',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium'
 ].filter(Boolean) as string[];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

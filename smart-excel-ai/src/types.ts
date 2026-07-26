@@ -51,7 +51,7 @@ export type FindingSeverity = 'high' | 'medium' | 'low' | 'info';
 
 export type Finding = {
   id: string;
-  type: 'duplicate' | 'inconsistency' | 'missing' | 'search' | 'cleaning' | 'summary' | 'relationship';
+  type: 'duplicate' | 'inconsistency' | 'missing' | 'search' | 'cleaning' | 'summary' | 'relationship' | 'financial';
   severity: FindingSeverity;
   title: string;
   sheetName?: string;
@@ -67,6 +67,59 @@ export type AssistantMessage = {
   role: 'user' | 'assistant';
   text: string;
   findings?: Finding[];
+};
+
+export type FinancialColumnMap = {
+  dateIndex: number;
+  amountIndex: number;
+  debitIndex: number;
+  creditIndex: number;
+  categoryIndex: number;
+  descriptionIndex: number;
+};
+
+export type FinancialGroupTotal = {
+  label: string;
+  total: number;
+  inflow: number;
+  outflow: number;
+  count: number;
+};
+
+export type MonthlyTotal = {
+  month: string;
+  label: string;
+  inflow: number;
+  outflow: number;
+  net: number;
+  count: number;
+};
+
+export type FinancialExtreme = {
+  rowNumber: number;
+  amount: number;
+  description: string;
+};
+
+export type FinancialAnomaly = FinancialExtreme & {
+  reason: string;
+};
+
+export type FinancialReport = {
+  sheetName: string;
+  currencySymbol: string;
+  columns: FinancialColumnMap;
+  transactionCount: number;
+  totalInflow: number;
+  totalOutflow: number;
+  net: number;
+  averageAmount: number;
+  largestInflow: FinancialExtreme | null;
+  largestOutflow: FinancialExtreme | null;
+  groupedBy: string;
+  categories: FinancialGroupTotal[];
+  monthly: MonthlyTotal[];
+  anomalies: FinancialAnomaly[];
 };
 
 export type RuleDefinition = {
