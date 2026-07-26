@@ -66,6 +66,7 @@ values. See `server/src/config.ts` for the full schema.
 | `PAYSTACK_MODE` | `dry_run` | `off` \| `dry_run` \| `live` (needs `PAYSTACK_SECRET_KEY`) |
 | `SMS_MODE` | `dry_run` | `off` \| `dry_run` \| `live` (needs `TERMII_API_KEY`, `TERMII_SENDER_ID`) |
 | `EINVOICE_MODE` | `off` | `off` \| `stub` |
+| `WHATSAPP_MODE` | `off` | `off` \| `dry_run` \| `live` (needs `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` + an approved `payment_reminder` template) |
 
 ## Security notes
 

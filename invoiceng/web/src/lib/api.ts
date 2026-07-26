@@ -92,6 +92,14 @@ export interface InvoiceItem {
   lineTotalKobo: number;
 }
 
+export interface InvoicePayment {
+  id: string;
+  amountKobo: number;
+  method: "cash" | "transfer" | "paystack";
+  reference: string | null;
+  paidAt: number;
+}
+
 export interface OutboxReminder {
   id: string;
   invoiceId: string;

@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router";
-import { api, ApiError, type Invoice, type InvoiceItem } from "../lib/api.js";
+import { api, ApiError, type Invoice, type InvoiceItem, type InvoicePayment } from "../lib/api.js";
 import { formatDate, formatNaira, isOverdue, parseNairaToKobo } from "../lib/money.js";
 import { ErrorAlert, Field, ListSkeleton, LiveStatus, StatusPill } from "../components/ui.js";
 
-type FullInvoice = Invoice & { items: InvoiceItem[] };
+type FullInvoice = Invoice & { items: InvoiceItem[]; payments: InvoicePayment[] };
+
+const METHOD_LABELS: Record<InvoicePayment["method"], string> = {
+  cash: "Cash",
+  transfer: "Bank transfer",
+  paystack: "Paystack (online)",
+};
 
 export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -181,6 +187,36 @@ export function InvoiceDetailPage() {
               Download PDF
             </a>
           </div>
+        </div>
+      )}
+
+      {invoice.payments.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Payments received</h2>
+          <ul className="list">
+            {invoice.payments.map((p, i) => (
+              <li key={p.id}>
+                <div className="row-link" style={{ cursor: "default" }}>
+                  <div className="row-main">
+                    <div className="row-title">{formatNaira(p.amountKobo)}</div>
+                    <div className="row-sub">
+                      {METHOD_LABELS[p.method]} · {formatDate(p.paidAt)}
+                    </div>
+                  </div>
+                  <div className="row-side" style={{ display: "flex", gap: 8 }}>
+                    <a
+                      className="btn btn-secondary"
+                      href={`/api/invoices/${invoice.id}/payments/${p.id}/receipt.pdf`}
+                      download
+                      aria-label={`Download receipt for payment ${i + 1}`}
+                    >
+                      Receipt
+                    </a>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

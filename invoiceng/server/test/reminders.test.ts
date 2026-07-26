@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { occurrencesFor, runReminderTick, type ReminderContext } from "../src/services/reminders.js";
+import type { WhatsAppSender } from "../src/services/whatsapp.js";
 import { buildTestApp, createCustomer, createInvoice, signup, type TestContext } from "./helpers.js";
 
 const DAY = 86_400_000;
 const silentLog = { info: () => {}, warn: () => {} };
+
+const waOff: WhatsAppSender = {
+  mode: "off",
+  sendReminderTemplate: async () => {
+    throw new Error("wa off — must not be called");
+  },
+};
 
 describe("occurrencesFor", () => {
   const settings = { daysBeforeDue: 2, everyNDaysAfterDue: 3, maxAfterDueCount: 2 };
@@ -34,7 +42,10 @@ describe("reminder tick", () => {
   let invoiceId: string;
   const dueDate = Date.UTC(2026, 0, 20);
 
-  function reminderCtx(smsOutcome: "sent" | "skipped_dry_run" | Error = "skipped_dry_run"): ReminderContext {
+  function reminderCtx(
+    smsOutcome: "sent" | "skipped_dry_run" | Error = "skipped_dry_run",
+    wa: WhatsAppSender = waOff,
+  ): ReminderContext {
     return {
       db: ctx.handle.db,
       appBaseUrl: "http://localhost:5173",
@@ -44,6 +55,7 @@ describe("reminder tick", () => {
           return smsOutcome;
         },
       },
+      wa,
       log: silentLog,
     };
   }
@@ -120,6 +132,41 @@ describe("reminder tick", () => {
     expect(mark.statusCode).toBe(200);
     const after = await ctx.app.inject({ method: "GET", url: "/api/reminders/outbox", headers: { cookie } });
     expect((after.json() as { outbox: unknown[] }).outbox).toHaveLength(0);
+  });
+
+  it("uses automated WhatsApp instead of the outbox when the Cloud API is enabled", async () => {
+    const calls: Array<{ to: string; params: object }> = [];
+    const waLive: WhatsAppSender = {
+      mode: "live",
+      sendReminderTemplate: async (to, params) => {
+        calls.push({ to, params });
+        return "sent";
+      },
+    };
+    await runReminderTick(reminderCtx("sent", waLive), dueDate - 2 * DAY + 1000);
+
+    const rows = await history();
+    expect(rows.some((r) => r.channel === "wa_auto" && r.status === "sent")).toBe(true);
+    expect(rows.some((r) => r.channel === "wa_link")).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.to).toBe("+2348052223344");
+    expect(calls[0]?.params).toMatchObject({ invoiceNumber: "INV-000001" });
+
+    const outboxRes = await ctx.app.inject({ method: "GET", url: "/api/reminders/outbox", headers: { cookie } });
+    expect((outboxRes.json() as { outbox: unknown[] }).outbox).toHaveLength(0);
+  });
+
+  it("marks wa_auto failed when the Cloud API errors", async () => {
+    const waBroken: WhatsAppSender = {
+      mode: "live",
+      sendReminderTemplate: async () => {
+        throw new Error("template rejected");
+      },
+    };
+    await runReminderTick(reminderCtx("sent", waBroken), dueDate - 2 * DAY + 1000);
+    const rows = await history();
+    const wa = rows.find((r) => r.channel === "wa_auto");
+    expect(wa?.status).toBe("failed");
   });
 
   it("does not let another business mark my reminder as sent", async () => {

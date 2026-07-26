@@ -163,7 +163,7 @@ export const reminderSettings = sqliteTable("reminder_settings", {
   maxAfterDueCount: integer("max_after_due_count").notNull().default(4),
 });
 
-export const REMINDER_CHANNELS = ["wa_link", "sms"] as const;
+export const REMINDER_CHANNELS = ["wa_link", "wa_auto", "sms"] as const;
 export type ReminderChannel = (typeof REMINDER_CHANNELS)[number];
 
 export const REMINDER_STATUSES = ["ready", "sent", "skipped_dry_run", "failed"] as const;

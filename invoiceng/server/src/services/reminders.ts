@@ -11,6 +11,7 @@ import {
 } from "../db/schema.js";
 import { formatNaira } from "../domain/money.js";
 import { toWaMeNumber } from "../domain/phone.js";
+import type { WhatsAppSender } from "./whatsapp.js";
 
 const DAY_MS = 86_400_000;
 
@@ -23,6 +24,7 @@ export interface ReminderContext {
   readonly db: Db;
   readonly appBaseUrl: string;
   readonly sms: SmsSender;
+  readonly wa: WhatsAppSender;
   readonly log: { info: (o: object, m: string) => void; warn: (o: object, m: string) => void };
 }
 
@@ -129,7 +131,10 @@ function materializeDueOccurrences(ctx: ReminderContext, now: number): void {
         payUrl,
       });
       const channels: ReminderChannel[] = ["sms"];
-      if (inv.customerPhone) channels.push("wa_link");
+      if (inv.customerPhone) {
+        // Automated WhatsApp replaces the manual tap-to-send outbox when enabled.
+        channels.push(ctx.wa.mode === "off" ? "wa_link" : "wa_auto");
+      }
       for (const channel of channels) {
         const waLink =
           channel === "wa_link" && inv.customerPhone
@@ -164,6 +169,11 @@ async function dispatchReadyReminders(ctx: ReminderContext, now: number): Promis
       channel: reminders.channel,
       message: reminders.message,
       customerPhone: customers.phone,
+      customerName: customers.name,
+      invoiceNumber: invoices.number,
+      totalKobo: invoices.totalKobo,
+      paidKobo: invoices.paidKobo,
+      shareToken: invoices.shareToken,
     })
     .from(reminders)
     .innerJoin(invoices, eq(reminders.invoiceId, invoices.id))
@@ -173,20 +183,31 @@ async function dispatchReadyReminders(ctx: ReminderContext, now: number): Promis
     .all();
 
   for (const r of ready) {
-    // wa_link stays 'ready' — it is the owner's tap-to-send outbox; SMS is automated.
-    if (r.channel !== "sms") continue;
+    // wa_link stays 'ready' — it is the owner's tap-to-send outbox.
+    if (r.channel !== "sms" && r.channel !== "wa_auto") continue;
     if (!r.customerPhone) {
       ctx.db.update(reminders).set({ status: "skipped_dry_run" }).where(eq(reminders.id, r.id)).run();
       continue;
     }
     try {
-      const outcome = await ctx.sms.send(r.customerPhone, r.message);
+      const outcome =
+        r.channel === "sms"
+          ? await ctx.sms.send(r.customerPhone, r.message)
+          : await ctx.wa.sendReminderTemplate(r.customerPhone, {
+              customerName: r.customerName,
+              invoiceNumber: r.invoiceNumber,
+              amount: formatNaira(r.totalKobo - r.paidKobo),
+              payUrl: `${ctx.appBaseUrl}/i/${r.shareToken}`,
+            });
       ctx.db
         .update(reminders)
         .set({ status: outcome === "sent" ? "sent" : "skipped_dry_run", sentAt: now })
         .where(eq(reminders.id, r.id))
         .run();
-      ctx.log.info({ reminderId: r.id, invoiceId: r.invoiceId, outcome }, "reminder dispatched");
+      ctx.log.info(
+        { reminderId: r.id, invoiceId: r.invoiceId, channel: r.channel, outcome },
+        "reminder dispatched",
+      );
     } catch (err) {
       ctx.db.update(reminders).set({ status: "failed" }).where(eq(reminders.id, r.id)).run();
       ctx.log.warn(

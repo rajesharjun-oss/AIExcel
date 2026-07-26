@@ -4,6 +4,7 @@ import { buildApp } from "./app.js";
 import { createPaystackClient } from "./services/paystack.js";
 import { createSmsSender } from "./services/sms.js";
 import { createEInvoiceProvider } from "./services/einvoice.js";
+import { createWhatsAppSender } from "./services/whatsapp.js";
 import { runReminderTick } from "./services/reminders.js";
 
 const REMINDER_TICK_MS = 60_000;
@@ -14,6 +15,13 @@ async function main(): Promise<void> {
   const paystack = createPaystackClient(config.PAYSTACK_MODE, config.PAYSTACK_SECRET_KEY, config.APP_BASE_URL);
   const sms = createSmsSender(config.SMS_MODE, config.TERMII_API_KEY, config.TERMII_SENDER_ID);
   const einvoice = createEInvoiceProvider(config.EINVOICE_MODE);
+  const wa = createWhatsAppSender({
+    mode: config.WHATSAPP_MODE,
+    token: config.WHATSAPP_TOKEN,
+    phoneNumberId: config.WHATSAPP_PHONE_NUMBER_ID,
+    templateName: config.WHATSAPP_TEMPLATE_NAME,
+    templateLang: config.WHATSAPP_TEMPLATE_LANG,
+  });
 
   const app = await buildApp({ config, db: handle.db, paystack, sms, einvoice });
 
@@ -22,7 +30,7 @@ async function main(): Promise<void> {
     if (tickRunning) return; // never overlap ticks
     tickRunning = true;
     runReminderTick(
-      { db: handle.db, appBaseUrl: config.APP_BASE_URL, sms, log: app.log },
+      { db: handle.db, appBaseUrl: config.APP_BASE_URL, sms, wa, log: app.log },
       Date.now(),
     )
       .catch((err: unknown) => {

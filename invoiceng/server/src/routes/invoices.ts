@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { businesses, customers, invoiceItems, PAYMENT_METHODS } from "../db/schema.js";
-import { renderInvoicePdf } from "../services/pdf.js";
+import { and, sql } from "drizzle-orm";
+import { businesses, customers, invoiceItems, payments, PAYMENT_METHODS } from "../db/schema.js";
+import { renderInvoicePdf, renderReceiptPdf } from "../services/pdf.js";
 import { MAX_AMOUNT_KOBO } from "../domain/money.js";
 import {
   createInvoice,
@@ -78,8 +79,75 @@ export async function invoiceRoutes(app: FastifyInstance): Promise<void> {
     const invoice = getInvoiceForBusiness(db, user.businessId, id);
     if (!invoice) return reply.code(404).send({ error: "not found" });
     const items = db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)).all();
-    return { ...invoice, items };
+    const invoicePayments = db
+      .select({
+        id: payments.id,
+        amountKobo: payments.amountKobo,
+        method: payments.method,
+        reference: payments.reference,
+        paidAt: payments.paidAt,
+      })
+      .from(payments)
+      .where(eq(payments.invoiceId, id))
+      .orderBy(sql`rowid`) // insertion order — stable even when timestamps tie
+      .all();
+    return { ...invoice, items, payments: invoicePayments };
   });
+
+  app.get(
+    "/:id/payments/:paymentId/receipt.pdf",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (req, reply) => {
+      const user = req.currentUser!;
+      const params = z
+        .object({ id: z.string().uuid(), paymentId: z.string().uuid() })
+        .parse(req.params);
+      const invoice = getInvoiceForBusiness(db, user.businessId, params.id);
+      if (!invoice) return reply.code(404).send({ error: "not found" });
+
+      // Ordered payment history for this invoice; the receipt number is the
+      // payment's stable 1-based position in it.
+      const history = db
+        .select()
+        .from(payments)
+        .where(and(eq(payments.invoiceId, params.id), eq(payments.businessId, user.businessId)))
+        .orderBy(sql`rowid`) // insertion order — stable even when timestamps tie
+        .all();
+      const index = history.findIndex((p) => p.id === params.paymentId);
+      if (index === -1) return reply.code(404).send({ error: "not found" });
+      const payment = history[index]!;
+      const paidToDateKobo = history.slice(0, index + 1).reduce((s, p) => s + p.amountKobo, 0);
+
+      const business = db
+        .select({ name: businesses.name, tin: businesses.tin })
+        .from(businesses)
+        .where(eq(businesses.id, user.businessId))
+        .get();
+      const customer = db
+        .select({ name: customers.name })
+        .from(customers)
+        .where(eq(customers.id, invoice.customerId))
+        .get();
+
+      const receiptNumber = `RCT-${invoice.number.replace(/^INV-/, "")}-${index + 1}`;
+      const pdf = await renderReceiptPdf({
+        businessName: business?.name ?? "",
+        businessTin: business?.tin ?? null,
+        customerName: customer?.name ?? "",
+        receiptNumber,
+        invoiceNumber: invoice.number,
+        amountKobo: payment.amountKobo,
+        method: payment.method,
+        paidAt: payment.paidAt,
+        invoiceTotalKobo: invoice.totalKobo,
+        paidToDateKobo,
+      });
+      return reply
+        .header("content-type", "application/pdf")
+        .header("content-disposition", `attachment; filename="${receiptNumber}.pdf"`)
+        .send(pdf);
+    },
+  );
 
   app.post("/:id/send", async (req, reply) => {
     const user = req.currentUser!;

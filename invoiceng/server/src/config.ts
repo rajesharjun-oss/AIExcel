@@ -23,6 +23,12 @@ const EnvSchema = z.object({
   TERMII_API_KEY: z.string().min(1).optional(),
   TERMII_SENDER_ID: z.string().min(1).max(11).optional(),
   EINVOICE_MODE: z.enum(["off", "stub"]).default("off"),
+  /** WhatsApp Cloud API (business-initiated template messages). Requires Meta verification. */
+  WHATSAPP_MODE: z.enum(["off", "dry_run", "live"]).default("off"),
+  WHATSAPP_TOKEN: z.string().min(1).optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().regex(/^\d+$/).optional(),
+  WHATSAPP_TEMPLATE_NAME: z.string().min(1).default("payment_reminder"),
+  WHATSAPP_TEMPLATE_LANG: z.string().min(2).max(10).default("en"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });
 
@@ -58,6 +64,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cfg.SMS_MODE === "live" && (!cfg.TERMII_API_KEY || !cfg.TERMII_SENDER_ID)) {
     throw new Error(
       "Invalid configuration: TERMII_API_KEY and TERMII_SENDER_ID are required when SMS_MODE=live",
+    );
+  }
+  if (cfg.WHATSAPP_MODE === "live" && (!cfg.WHATSAPP_TOKEN || !cfg.WHATSAPP_PHONE_NUMBER_ID)) {
+    throw new Error(
+      "Invalid configuration: WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID are required when WHATSAPP_MODE=live",
     );
   }
 
