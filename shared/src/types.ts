@@ -35,6 +35,15 @@ export interface MatchResponse {
   cached: boolean;
 }
 
+export interface TranslateRequest {
+  texts: string[];
+  targetLanguage: string;
+}
+export interface TranslateResponse {
+  translations: string[];
+  cached: boolean;
+}
+
 export interface SummarizeRequest {
   texts: string[];
 }

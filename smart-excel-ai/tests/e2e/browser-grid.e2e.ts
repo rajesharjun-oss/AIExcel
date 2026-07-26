@@ -16,7 +16,13 @@ const appUrl = `http://127.0.0.1:${port}/`;
 const chromeCandidates = [
   process.env.CHROME_PATH,
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  '/opt/pw-browsers/chromium',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ].filter(Boolean) as string[];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -26,7 +32,12 @@ const killTree = (child: ChildProcessWithoutNullStreams | undefined) => {
   if (process.platform === 'win32') {
     spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
   } else {
-    child.kill('SIGTERM');
+    // Kill the whole process group so grandchildren (e.g. vite under npm) exit too.
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {
+      child.kill('SIGTERM');
+    }
   }
 };
 
@@ -54,11 +65,11 @@ const findChrome = () => {
 };
 
 const startVite = (): ChildProcessWithoutNullStreams => {
-  const child = spawn('cmd.exe', ['/c', 'npm', 'run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)], {
-    cwd: process.cwd(),
-    stdio: 'pipe',
-    windowsHide: true
-  });
+  const devArgs = ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)];
+  const child =
+    process.platform === 'win32'
+      ? spawn('cmd.exe', ['/c', 'npm', ...devArgs], { cwd: process.cwd(), stdio: 'pipe', windowsHide: true })
+      : spawn('npm', devArgs, { cwd: process.cwd(), stdio: 'pipe', detached: true });
   child.stdout.on('data', (chunk) => process.stdout.write(`[vite] ${chunk}`));
   child.stderr.on('data', (chunk) => process.stderr.write(`[vite] ${chunk}`));
   return child;
@@ -72,6 +83,7 @@ const startChrome = (): ChildProcessWithoutNullStreams => {
     findChrome(),
     [
       '--headless=new',
+      '--no-sandbox',
       '--disable-gpu',
       '--no-first-run',
       '--no-default-browser-check',
@@ -248,9 +260,15 @@ const run = async () => {
       cell.setSelectionRange(cell.value.length, cell.value.length);
       for (let index = 0; index < 40; index += 1) {
         const active = document.activeElement as HTMLInputElement | null;
+        const before = active?.getAttribute('data-cell');
         active?.setSelectionRange(active.value.length, active.value.length);
         active?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-        await new Promise((resolve) => window.setTimeout(resolve, 80));
+        // Wait until focus actually moves so slow headless renders do not drop presses.
+        const started = Date.now();
+        while (Date.now() - started < 300) {
+          await new Promise((resolve) => window.setTimeout(resolve, 20));
+          if ((document.activeElement as HTMLElement | null)?.getAttribute('data-cell') !== before) break;
+        }
       }
       return {
         scrollLeft: wrapper.scrollLeft,
@@ -272,8 +290,14 @@ const run = async () => {
       cell.focus();
       for (let index = 0; index < 120; index += 1) {
         const active = document.activeElement as HTMLInputElement | null;
+        const before = active?.getAttribute('data-cell');
         active?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-        await new Promise((resolve) => window.setTimeout(resolve, 20));
+        // Wait until focus actually moves so slow headless renders do not drop presses.
+        const started = Date.now();
+        while (Date.now() - started < 300) {
+          await new Promise((resolve) => window.setTimeout(resolve, 10));
+          if ((document.activeElement as HTMLElement | null)?.getAttribute('data-cell') !== before) break;
+        }
       }
       return {
         scrollTop: wrapper.scrollTop,
@@ -454,6 +478,58 @@ const run = async () => {
     });
     assert.equal(cleanButtonEnabled, true);
 
+    await page.evaluate(async () => {
+      const translateButton = Array.from(document.querySelectorAll('.translate-box button')).find((item) =>
+        item.textContent?.includes('Translate')
+      ) as HTMLButtonElement | undefined;
+      if (!translateButton) throw new Error('Translate button not found');
+      translateButton.click();
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const tick = () => {
+          const firstHeader = document.querySelectorAll('thead th')[1]?.textContent;
+          if (firstHeader === 'Fecha') {
+            resolve();
+          } else if (Date.now() - started > 10_000) {
+            reject(new Error(`translation did not update headers, saw: ${firstHeader}`));
+          } else {
+            window.setTimeout(tick, 100);
+          }
+        };
+        tick();
+      });
+    });
+    const translated = await page.evaluate(() => ({
+      headers: Array.from(document.querySelectorAll('thead th')).slice(1, 5).map((item) => item.textContent),
+      amountCell: (document.querySelector('[data-cell="Sheet1-1-3"]') as HTMLInputElement | null)?.value,
+      revertVisible: Array.from(document.querySelectorAll('.translate-box button')).some((item) => item.textContent?.includes('Revert'))
+    }));
+    assert.deepEqual(translated.headers, ['Fecha', 'Descripción', 'Nombre', 'Importe']);
+    assert.equal(translated.amountCell, '1000');
+    assert.equal(translated.revertVisible, true);
+
+    await page.evaluate(async () => {
+      const revertButton = Array.from(document.querySelectorAll('.translate-box button')).find((item) =>
+        item.textContent?.includes('Revert')
+      ) as HTMLButtonElement | undefined;
+      if (!revertButton) throw new Error('Revert button not found');
+      revertButton.click();
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const tick = () => {
+          const firstHeader = document.querySelectorAll('thead th')[1]?.textContent;
+          if (firstHeader === 'Date') {
+            resolve();
+          } else if (Date.now() - started > 10_000) {
+            reject(new Error(`revert did not restore headers, saw: ${firstHeader}`));
+          } else {
+            window.setTimeout(tick, 100);
+          }
+        };
+        tick();
+      });
+    });
+
     console.log('ok 1 - browser creates larger built-in blank workbook with row labels');
     console.log('ok 2 - browser collapses sheet and AI side panels');
     console.log('ok 3 - browser upload renders editable grid');
@@ -464,9 +540,11 @@ const run = async () => {
     console.log('ok 8 - browser virtual scrolling reaches and edits uploaded rows beyond 500');
     console.log('ok 9 - browser shortcut-style replacement works inside a cell input');
     console.log('ok 10 - browser clean action enables export after edits');
+    console.log('ok 11 - browser live translation converts headers and status text');
+    console.log('ok 12 - browser revert restores original text after translation');
     console.log('');
-    console.log('tests 10');
-    console.log('pass 10');
+    console.log('tests 12');
+    console.log('pass 12');
     console.log('fail 0');
   } finally {
     killTree(chrome);
@@ -474,11 +552,16 @@ const run = async () => {
   }
 };
 
-run().catch((error) => {
-  console.error(error);
-  console.log('');
-  console.log('tests 10');
-  console.log('pass 0');
-  console.log('fail 1');
-  process.exitCode = 1;
-});
+run()
+  .then(() => {
+    // Exit explicitly: surviving child stdio streams must not keep the event loop alive.
+    process.exit(process.exitCode ?? 0);
+  })
+  .catch((error) => {
+    console.error(error);
+    console.log('');
+    console.log('tests 12');
+    console.log('pass 0');
+    console.log('fail 1');
+    process.exit(1);
+  });

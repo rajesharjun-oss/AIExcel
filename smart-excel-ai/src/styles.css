@@ -32,7 +32,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -41,7 +42,8 @@ button {
 }
 
 button:disabled,
-input:disabled {
+input:disabled,
+select:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -213,6 +215,7 @@ input:disabled {
 }
 
 .search-box,
+.translate-box,
 .ask-form {
   display: flex;
   align-items: center;
@@ -221,6 +224,30 @@ input:disabled {
   background: var(--surface-strong);
   padding: 0 8px 0 11px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.translate-box {
+  min-height: 40px;
+  color: var(--emerald-dark);
+}
+
+.translate-box select {
+  min-height: 30px;
+  border: 1px solid rgba(30, 77, 64, 0.18);
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 0 6px;
+}
+
+.translate-box button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid rgba(30, 77, 64, 0.18);
+  background: #e9f1ea;
+  color: var(--emerald-dark);
+  padding: 0 10px;
 }
 
 .search-box {
@@ -724,8 +751,18 @@ th.row-number {
 
   .button,
   .search-box,
+  .translate-box,
   .ask-form {
     width: 100%;
+  }
+
+  .translate-box {
+    flex-wrap: wrap;
+    padding: 8px;
+  }
+
+  .translate-box select {
+    flex: 1 1 auto;
   }
 
   .search-box {
