@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - claude/scaffold-excel-ai-addin-tOGcT
+  pull_request:
+
+jobs:
+  smart-excel-ai:
+    name: Smart Excel AI tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smart-excel-ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: smart-excel-ai/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run unit tests
+        run: npm test
+      - name: Build production bundle
+        run: npm run build
