@@ -1,0 +1,10 @@
+{
+  "name": "InvoiceNG",
+  "short_name": "InvoiceNG",
+  "description": "Invoicing and debt recovery for Nigerian businesses",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f5f1",
+  "theme_color": "#0b3d2e",
+  "icons": []
+}
