@@ -11,6 +11,7 @@ import { matchRouter } from "./routes/match";
 import { summarizeRouter } from "./routes/summarize";
 import { translateRouter } from "./routes/translate";
 import { askRouter } from "./routes/ask";
+import { workbookAskRouter } from "./routes/workbook-ask";
 import { chatRouter } from "./routes/chat";
 import { auditRouter } from "./routes/audit";
 
@@ -37,6 +38,7 @@ app.use("/v1/match", matchRouter);
 app.use("/v1/summarize", summarizeRouter);
 app.use("/v1/translate", translateRouter);
 app.use("/v1/ask", askRouter);
+app.use("/v1/workbook-ask", workbookAskRouter);
 app.use("/v1/chat", chatRouter);
 app.use("/v1/audit", auditRouter);
 

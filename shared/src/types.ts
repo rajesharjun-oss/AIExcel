@@ -61,6 +61,20 @@ export interface AskResponse {
   cached: boolean;
 }
 
+// ── Workbook Q&A (browser MVP Ask AI) ─────────────────────────────────────
+
+export interface WorkbookAskRequest {
+  question: string;
+  workbookProfile?: Record<string, unknown>;
+  visibleFindings?: unknown[];
+  financialReport?: Record<string, unknown> | null;
+}
+
+export interface WorkbookAskResponse {
+  answer: string;
+  cached: boolean;
+}
+
 // ── Chat (sidebar assistant) ──────────────────────────────────────────────
 
 export interface ChatMessage {

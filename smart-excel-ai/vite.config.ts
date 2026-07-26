@@ -151,6 +151,25 @@ const aiProxyPlugin = (): Plugin => ({
 
       try {
         const body = await readJsonBody(req as RawRequest);
+
+        // Preferred: forward to the AIExcel backend workbook-ask route when it is running.
+        const backendUrl = process.env.AIEXCEL_BACKEND_URL || '';
+        if (backendUrl) {
+          const backendResponse = await fetch(`${backendUrl.replace(/\/$/, '')}/v1/workbook-ask`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              ...(process.env.AIEXCEL_BACKEND_KEY ? { authorization: `Bearer ${process.env.AIEXCEL_BACKEND_KEY}` } : {})
+            },
+            body: JSON.stringify(body)
+          });
+          const backendData = await backendResponse.json();
+          res.statusCode = backendResponse.status;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify(backendData));
+          return;
+        }
+
         const apiUrl = process.env.AI_API_URL || (process.env.OPENAI_API_KEY ? 'https://api.openai.com/v1/responses' : '');
         const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
 
