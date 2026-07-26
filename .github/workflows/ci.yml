@@ -43,6 +43,8 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Install workspace dependencies
-        run: npm install
+        run: npm ci
       - name: Type-check backend
         run: npx tsc --noEmit -p backend/tsconfig.json
+      - name: Type-check add-in
+        run: npx tsc --noEmit -p addin/tsconfig.json
