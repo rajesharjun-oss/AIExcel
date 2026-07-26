@@ -54,7 +54,8 @@ const findChrome = () => {
 };
 
 const startVite = (): ChildProcessWithoutNullStreams => {
-  const child = spawn('cmd.exe', ['/c', 'npm', 'run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)], {
+  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const child = spawn(npmCommand, ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)], {
     cwd: process.cwd(),
     stdio: 'pipe',
     windowsHide: true
