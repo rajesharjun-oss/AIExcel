@@ -536,4 +536,22 @@ export const downloadCleanWorkbook = (workbook: WorkbookModel): void => {
   XLSX.writeFile(output, `${baseName || 'workbook'}_cleaned.xlsx`);
 };
 
+// As-is export: current cell values (including edits and translations), no cleaning.
+export const buildWorkbookCopy = (workbook: WorkbookModel): XLSX.WorkBook => {
+  const output = XLSX.utils.book_new();
+  workbook.sheets.forEach((sheet) => {
+    const worksheet = XLSX.utils.aoa_to_sheet(sheet.rows);
+    XLSX.utils.book_append_sheet(output, worksheet, sheet.name.slice(0, 31));
+  });
+  return output;
+};
+
+export const workbookCopyToArrayBuffer = (workbook: WorkbookModel): ArrayBuffer =>
+  XLSX.write(buildWorkbookCopy(workbook), { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+export const downloadWorkbookCopy = (workbook: WorkbookModel): void => {
+  const baseName = workbook.fileName.replace(/\.[^.]+$/, '');
+  XLSX.writeFile(buildWorkbookCopy(workbook), `${baseName || 'workbook'}_copy.xlsx`);
+};
+
 export const toPreviewRows = (sheet: SheetData): CellValue[][] => sheet.rows.slice(0, MAX_PREVIEW_ROWS);

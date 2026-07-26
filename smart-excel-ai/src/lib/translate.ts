@@ -1,7 +1,7 @@
 import type { CellValue, Finding, SheetData, WorkbookModel } from '../types';
 import { cellToText, isBlank } from './workbook';
 
-export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt';
+export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'pt' | 'it';
 
 export type LanguageOption = {
   code: LanguageCode;
@@ -13,7 +13,8 @@ export const supportedLanguages: LanguageOption[] = [
   { code: 'es', label: 'Spanish' },
   { code: 'fr', label: 'French' },
   { code: 'de', label: 'German' },
-  { code: 'pt', label: 'Portuguese' }
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'it', label: 'Italian' }
 ];
 
 export type TranslationResult = {
@@ -22,51 +23,52 @@ export type TranslationResult = {
   skippedCells: number;
   targetLanguage: LanguageCode;
   sheetName: string;
+  sheetNames: string[];
   usedRemoteAi: boolean;
 };
 
 // Compact phrase dictionary covering common spreadsheet vocabulary. Keeps the
 // feature useful offline, mirroring the local Ask AI fallback pattern.
 const phraseDictionary: Record<string, Partial<Record<LanguageCode, string>>> = {
-  amount: { en: 'Amount', es: 'Importe', fr: 'Montant', de: 'Betrag', pt: 'Valor' },
-  date: { en: 'Date', es: 'Fecha', fr: 'Date', de: 'Datum', pt: 'Data' },
-  description: { en: 'Description', es: 'Descripción', fr: 'Description', de: 'Beschreibung', pt: 'Descrição' },
-  name: { en: 'Name', es: 'Nombre', fr: 'Nom', de: 'Name', pt: 'Nome' },
-  total: { en: 'Total', es: 'Total', fr: 'Total', de: 'Gesamt', pt: 'Total' },
-  balance: { en: 'Balance', es: 'Saldo', fr: 'Solde', de: 'Saldo', pt: 'Saldo' },
-  category: { en: 'Category', es: 'Categoría', fr: 'Catégorie', de: 'Kategorie', pt: 'Categoria' },
-  customer: { en: 'Customer', es: 'Cliente', fr: 'Client', de: 'Kunde', pt: 'Cliente' },
-  invoice: { en: 'Invoice', es: 'Factura', fr: 'Facture', de: 'Rechnung', pt: 'Fatura' },
-  payment: { en: 'Payment', es: 'Pago', fr: 'Paiement', de: 'Zahlung', pt: 'Pagamento' },
-  price: { en: 'Price', es: 'Precio', fr: 'Prix', de: 'Preis', pt: 'Preço' },
-  quantity: { en: 'Quantity', es: 'Cantidad', fr: 'Quantité', de: 'Menge', pt: 'Quantidade' },
-  status: { en: 'Status', es: 'Estado', fr: 'Statut', de: 'Status', pt: 'Estado' },
-  paid: { en: 'Paid', es: 'Pagado', fr: 'Payé', de: 'Bezahlt', pt: 'Pago' },
-  pending: { en: 'Pending', es: 'Pendiente', fr: 'En attente', de: 'Ausstehend', pt: 'Pendente' },
-  overdue: { en: 'Overdue', es: 'Vencido', fr: 'En retard', de: 'Überfällig', pt: 'Vencido' },
-  yes: { en: 'Yes', es: 'Sí', fr: 'Oui', de: 'Ja', pt: 'Sim' },
-  no: { en: 'No', es: 'No', fr: 'Non', de: 'Nein', pt: 'Não' },
-  bank: { en: 'Bank', es: 'Banco', fr: 'Banque', de: 'Bank', pt: 'Banco' },
-  charge: { en: 'Charge', es: 'Cargo', fr: 'Frais', de: 'Gebühr', pt: 'Cobrança' },
-  transfer: { en: 'Transfer', es: 'Transferencia', fr: 'Virement', de: 'Überweisung', pt: 'Transferência' },
-  account: { en: 'Account', es: 'Cuenta', fr: 'Compte', de: 'Konto', pt: 'Conta' },
-  tax: { en: 'Tax', es: 'Impuesto', fr: 'Taxe', de: 'Steuer', pt: 'Imposto' },
-  salary: { en: 'Salary', es: 'Salario', fr: 'Salaire', de: 'Gehalt', pt: 'Salário' },
-  expense: { en: 'Expense', es: 'Gasto', fr: 'Dépense', de: 'Ausgabe', pt: 'Despesa' },
-  income: { en: 'Income', es: 'Ingreso', fr: 'Revenu', de: 'Einkommen', pt: 'Renda' },
-  notes: { en: 'Notes', es: 'Notas', fr: 'Notes', de: 'Notizen', pt: 'Notas' },
-  address: { en: 'Address', es: 'Dirección', fr: 'Adresse', de: 'Adresse', pt: 'Endereço' },
-  city: { en: 'City', es: 'Ciudad', fr: 'Ville', de: 'Stadt', pt: 'Cidade' },
-  country: { en: 'Country', es: 'País', fr: 'Pays', de: 'Land', pt: 'País' },
-  region: { en: 'Region', es: 'Región', fr: 'Région', de: 'Region', pt: 'Região' },
-  product: { en: 'Product', es: 'Producto', fr: 'Produit', de: 'Produkt', pt: 'Produto' },
-  reference: { en: 'Reference', es: 'Referencia', fr: 'Référence', de: 'Referenz', pt: 'Referência' },
-  vendor: { en: 'Vendor', es: 'Proveedor', fr: 'Fournisseur', de: 'Lieferant', pt: 'Fornecedor' },
-  currency: { en: 'Currency', es: 'Moneda', fr: 'Devise', de: 'Währung', pt: 'Moeda' },
-  month: { en: 'Month', es: 'Mes', fr: 'Mois', de: 'Monat', pt: 'Mês' },
-  year: { en: 'Year', es: 'Año', fr: 'Année', de: 'Jahr', pt: 'Ano' },
-  debit: { en: 'Debit', es: 'Débito', fr: 'Débit', de: 'Soll', pt: 'Débito' },
-  credit: { en: 'Credit', es: 'Crédito', fr: 'Crédit', de: 'Haben', pt: 'Crédito' }
+  amount: { en: 'Amount', es: 'Importe', fr: 'Montant', de: 'Betrag', pt: 'Valor', it: 'Importo' },
+  date: { en: 'Date', es: 'Fecha', fr: 'Date', de: 'Datum', pt: 'Data', it: 'Data' },
+  description: { en: 'Description', es: 'Descripción', fr: 'Description', de: 'Beschreibung', pt: 'Descrição', it: 'Descrizione' },
+  name: { en: 'Name', es: 'Nombre', fr: 'Nom', de: 'Name', pt: 'Nome', it: 'Nome' },
+  total: { en: 'Total', es: 'Total', fr: 'Total', de: 'Gesamt', pt: 'Total', it: 'Totale' },
+  balance: { en: 'Balance', es: 'Saldo', fr: 'Solde', de: 'Saldo', pt: 'Saldo', it: 'Saldo' },
+  category: { en: 'Category', es: 'Categoría', fr: 'Catégorie', de: 'Kategorie', pt: 'Categoria', it: 'Categoria' },
+  customer: { en: 'Customer', es: 'Cliente', fr: 'Client', de: 'Kunde', pt: 'Cliente', it: 'Cliente' },
+  invoice: { en: 'Invoice', es: 'Factura', fr: 'Facture', de: 'Rechnung', pt: 'Fatura', it: 'Fattura' },
+  payment: { en: 'Payment', es: 'Pago', fr: 'Paiement', de: 'Zahlung', pt: 'Pagamento', it: 'Pagamento' },
+  price: { en: 'Price', es: 'Precio', fr: 'Prix', de: 'Preis', pt: 'Preço', it: 'Prezzo' },
+  quantity: { en: 'Quantity', es: 'Cantidad', fr: 'Quantité', de: 'Menge', pt: 'Quantidade', it: 'Quantità' },
+  status: { en: 'Status', es: 'Estado', fr: 'Statut', de: 'Status', pt: 'Estado', it: 'Stato' },
+  paid: { en: 'Paid', es: 'Pagado', fr: 'Payé', de: 'Bezahlt', pt: 'Pago', it: 'Pagato' },
+  pending: { en: 'Pending', es: 'Pendiente', fr: 'En attente', de: 'Ausstehend', pt: 'Pendente', it: 'In sospeso' },
+  overdue: { en: 'Overdue', es: 'Vencido', fr: 'En retard', de: 'Überfällig', pt: 'Vencido', it: 'Scaduto' },
+  yes: { en: 'Yes', es: 'Sí', fr: 'Oui', de: 'Ja', pt: 'Sim', it: 'Sì' },
+  no: { en: 'No', es: 'No', fr: 'Non', de: 'Nein', pt: 'Não', it: 'No' },
+  bank: { en: 'Bank', es: 'Banco', fr: 'Banque', de: 'Bank', pt: 'Banco', it: 'Banca' },
+  charge: { en: 'Charge', es: 'Cargo', fr: 'Frais', de: 'Gebühr', pt: 'Cobrança', it: 'Addebito' },
+  transfer: { en: 'Transfer', es: 'Transferencia', fr: 'Virement', de: 'Überweisung', pt: 'Transferência', it: 'Bonifico' },
+  account: { en: 'Account', es: 'Cuenta', fr: 'Compte', de: 'Konto', pt: 'Conta', it: 'Conto' },
+  tax: { en: 'Tax', es: 'Impuesto', fr: 'Taxe', de: 'Steuer', pt: 'Imposto', it: 'Imposta' },
+  salary: { en: 'Salary', es: 'Salario', fr: 'Salaire', de: 'Gehalt', pt: 'Salário', it: 'Stipendio' },
+  expense: { en: 'Expense', es: 'Gasto', fr: 'Dépense', de: 'Ausgabe', pt: 'Despesa', it: 'Spesa' },
+  income: { en: 'Income', es: 'Ingreso', fr: 'Revenu', de: 'Einkommen', pt: 'Renda', it: 'Reddito' },
+  notes: { en: 'Notes', es: 'Notas', fr: 'Notes', de: 'Notizen', pt: 'Notas', it: 'Note' },
+  address: { en: 'Address', es: 'Dirección', fr: 'Adresse', de: 'Adresse', pt: 'Endereço', it: 'Indirizzo' },
+  city: { en: 'City', es: 'Ciudad', fr: 'Ville', de: 'Stadt', pt: 'Cidade', it: 'Città' },
+  country: { en: 'Country', es: 'País', fr: 'Pays', de: 'Land', pt: 'País', it: 'Paese' },
+  region: { en: 'Region', es: 'Región', fr: 'Région', de: 'Region', pt: 'Região', it: 'Regione' },
+  product: { en: 'Product', es: 'Producto', fr: 'Produit', de: 'Produkt', pt: 'Produto', it: 'Prodotto' },
+  reference: { en: 'Reference', es: 'Referencia', fr: 'Référence', de: 'Referenz', pt: 'Referência', it: 'Riferimento' },
+  vendor: { en: 'Vendor', es: 'Proveedor', fr: 'Fournisseur', de: 'Lieferant', pt: 'Fornecedor', it: 'Fornitore' },
+  currency: { en: 'Currency', es: 'Moneda', fr: 'Devise', de: 'Währung', pt: 'Moeda', it: 'Valuta' },
+  month: { en: 'Month', es: 'Mes', fr: 'Mois', de: 'Monat', pt: 'Mês', it: 'Mese' },
+  year: { en: 'Year', es: 'Año', fr: 'Année', de: 'Jahr', pt: 'Ano', it: 'Anno' },
+  debit: { en: 'Debit', es: 'Débito', fr: 'Débit', de: 'Soll', pt: 'Débito', it: 'Debito' },
+  credit: { en: 'Credit', es: 'Crédito', fr: 'Crédit', de: 'Haben', pt: 'Crédito', it: 'Credito' }
 };
 
 type ReverseEntry = { key: string; language: LanguageCode };
@@ -189,17 +191,29 @@ const fetchRemoteTranslations = async (
   }
 };
 
-export const translateSheet = async (
+const scopeLabel = (sheetNames: string[]): string =>
+  sheetNames.length === 1 ? sheetNames[0] : `${sheetNames.length} sheets`;
+
+export const translateSheets = async (
   workbook: WorkbookModel,
-  sheetName: string,
+  sheetNames: string[],
   targetLanguage: LanguageCode
 ): Promise<TranslationResult> => {
-  const sheet = workbook.sheets.find((candidate) => candidate.name === sheetName);
-  if (!sheet) {
-    return { workbook, translatedCells: 0, skippedCells: 0, targetLanguage, sheetName, usedRemoteAi: false };
+  const targets = workbook.sheets.filter((sheet) => sheetNames.includes(sheet.name));
+  if (!targets.length) {
+    return {
+      workbook,
+      translatedCells: 0,
+      skippedCells: 0,
+      targetLanguage,
+      sheetName: scopeLabel(sheetNames.length ? sheetNames : ['(none)']),
+      sheetNames,
+      usedRemoteAi: false
+    };
   }
 
-  const texts = collectTranslatableTexts(sheet);
+  // One batched remote round-trip covers every targeted sheet.
+  const texts = Array.from(new Set(targets.flatMap(collectTranslatableTexts)));
   const remote = texts.length ? await fetchRemoteTranslations(texts, targetLanguage) : null;
 
   let translatedCells = 0;
@@ -220,26 +234,42 @@ export const translateSheet = async (
     return translated;
   };
 
-  const nextRows = sheet.rows.map((row) => row.map(translateCell));
-  const nextHeaders = sheet.headers.map((header, index) => {
-    const headerCell = nextRows[sheet.headerRowIndex]?.[index];
-    return isBlank(headerCell) ? header : cellToText(headerCell);
-  });
+  const translateOneSheet = (sheet: SheetData): SheetData => {
+    const nextRows = sheet.rows.map((row) => row.map(translateCell));
+    const nextHeaders = sheet.headers.map((header, index) => {
+      const headerCell = nextRows[sheet.headerRowIndex]?.[index];
+      return isBlank(headerCell) ? header : cellToText(headerCell);
+    });
+    return { ...sheet, rows: nextRows, headers: nextHeaders };
+  };
 
-  const nextSheet: SheetData = { ...sheet, rows: nextRows, headers: nextHeaders };
+  const targetNames = new Set(targets.map((sheet) => sheet.name));
 
   return {
     workbook: {
       ...workbook,
-      sheets: workbook.sheets.map((candidate) => (candidate.name === sheetName ? nextSheet : candidate))
+      sheets: workbook.sheets.map((sheet) => (targetNames.has(sheet.name) ? translateOneSheet(sheet) : sheet))
     },
     translatedCells,
     skippedCells,
     targetLanguage,
-    sheetName,
+    sheetName: scopeLabel(targets.map((sheet) => sheet.name)),
+    sheetNames: targets.map((sheet) => sheet.name),
     usedRemoteAi: Boolean(remote?.size)
   };
 };
+
+export const translateSheet = (
+  workbook: WorkbookModel,
+  sheetName: string,
+  targetLanguage: LanguageCode
+): Promise<TranslationResult> => translateSheets(workbook, [sheetName], targetLanguage);
+
+export const translateWorkbook = (
+  workbook: WorkbookModel,
+  targetLanguage: LanguageCode
+): Promise<TranslationResult> =>
+  translateSheets(workbook, workbook.sheets.map((sheet) => sheet.name), targetLanguage);
 
 export const languageLabel = (code: LanguageCode): string =>
   supportedLanguages.find((language) => language.code === code)?.label ?? code;

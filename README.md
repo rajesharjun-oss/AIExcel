@@ -8,11 +8,12 @@ AIExcel is a smart spreadsheet assistant project with two complementary paths:
 
 ## Live Translation
 
-The active sheet can be translated in place from the toolbar:
+Sheets can be translated in place from the toolbar:
 
-- Pick a target language (English, Spanish, French, German, Portuguese) and press **Translate**.
+- Pick a target language (English, Spanish, French, German, Portuguese, Italian), choose the scope (**Active sheet** or **All sheets**), and press **Translate**.
 - Text cells and headers are translated; numbers, dates, currency amounts, emails, and identifiers are always preserved.
-- Translation is non-destructive: **Revert** restores the original text at any time.
+- Translation is non-destructive: **Revert** restores the original text at any time (until the workbook is edited).
+- **Download Copy** exports the workbook exactly as shown — including translations and edits — as a new `.xlsx` file.
 - With the backend running and an API key configured, translation uses the `/v1/translate` AI route; otherwise a built-in phrase dictionary keeps the feature working fully offline.
 
 ## Browser MVP
