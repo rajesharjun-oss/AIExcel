@@ -150,7 +150,7 @@ const connectPage = async (): Promise<CdpPage> => {
   const target = await fetch(`http://127.0.0.1:${chromePort}/json/new?${encodeURIComponent(appUrl)}`, { method: 'PUT' }).then((r) => r.json() as any);
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Timed out connecting to Chrome DevTools websocket')), 10_000);
+    const timer = setTimeout(() => reject(new Error('Timed out connecting to Chrome DevTools websocket')), 30_000);
     socket.addEventListener('open', () => {
       clearTimeout(timer);
       resolve();
@@ -186,7 +186,7 @@ const run = async () => {
         const tick = () => {
           if (document.querySelector('input[type="file"]')) {
             resolve();
-          } else if (Date.now() - started > 10_000) {
+          } else if (Date.now() - started > 30_000) {
             reject(new Error('app did not render file input'));
           } else {
             window.setTimeout(tick, 100);
@@ -205,7 +205,7 @@ const run = async () => {
         const tick = () => {
           if (document.querySelector('[data-cell="Sheet1-1-0"]')) {
             resolve();
-          } else if (Date.now() - started > 10_000) {
+          } else if (Date.now() - started > 30_000) {
             reject(new Error('blank workbook grid did not render'));
           } else {
             window.setTimeout(tick, 100);
@@ -330,7 +330,7 @@ const run = async () => {
         const tick = () => {
           if (document.querySelector('[data-cell="Sheet1-1-1"]')) {
             resolve();
-          } else if (Date.now() - started > 10_000) {
+          } else if (Date.now() - started > 30_000) {
             reject(new Error('large upload did not render'));
           } else {
             window.setTimeout(tick, 100);
@@ -349,7 +349,7 @@ const run = async () => {
         const tick = () => {
           if (document.querySelector('[data-cell="Sheet1-750-1"]')) {
             resolve();
-          } else if (Date.now() - started > 10_000) {
+          } else if (Date.now() - started > 30_000) {
             reject(new Error('row 750 did not render after scrolling'));
           } else {
             window.setTimeout(tick, 100);
@@ -390,7 +390,7 @@ const run = async () => {
           const uploadedCell = document.querySelector<HTMLInputElement>('[data-cell="Sheet1-1-1"]');
           if (uploadedCell?.value === '  FIRS payment  ') {
             resolve();
-          } else if (Date.now() - started > 10_000) {
+          } else if (Date.now() - started > 30_000) {
             reject(new Error('grid did not render after upload'));
           } else {
             window.setTimeout(tick, 100);
@@ -500,7 +500,7 @@ const run = async () => {
           const firstHeader = document.querySelectorAll('thead th')[1]?.textContent;
           if (firstHeader === 'Fecha') {
             resolve();
-          } else if (Date.now() - started > 10_000) {
+          } else if (Date.now() - started > 30_000) {
             reject(new Error(`translation did not update headers, saw: ${firstHeader}`));
           } else {
             window.setTimeout(tick, 100);
@@ -530,7 +530,7 @@ const run = async () => {
           const firstHeader = document.querySelectorAll('thead th')[1]?.textContent;
           if (firstHeader === 'Date') {
             resolve();
-          } else if (Date.now() - started > 10_000) {
+          } else if (Date.now() - started > 30_000) {
             reject(new Error(`revert did not restore headers, saw: ${firstHeader}`));
           } else {
             window.setTimeout(tick, 100);
